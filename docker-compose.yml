@@ -1,43 +1,57 @@
 version: '3.8'
 
 services:
-  # Service 1: Ứng dụng của bạn (Backend/Frontend)
-  web:
-    build: . # Build image từ Dockerfile trong thư mục hiện tại
-    # image: nginx:latest # Hoặc sử dụng image có sẵn thay vì build
-    container_name: my_web_app
-    ports:
-      - "8080:80" # Map cổng 8080 của máy host vào cổng 80 của container
-    volumes:
-      - .:/app # Đồng bộ code từ máy thật vào container để dev tiện lợi
-    environment:
-      - NODE_ENV=development
-    depends_on:
-      - db # Đảm bảo DB chạy trước khi Web chạy
-    networks:
-      - app-network
-
-  # Service 2: Cơ sở dữ liệu
   db:
     image: postgres:15-alpine
-    container_name: my_database
+    container_name: dcho_db
     restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret_password
+      POSTGRES_DB: shopping_db
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: secretpassword
-      POSTGRES_DB: my_database_name
     volumes:
-      - db_data:/var/lib/postgresql/data # Lưu trữ dữ liệu để không mất khi tắt container
+      - pgdata:/var/lib/postgresql/data
     networks:
-      - app-network
+      - dcho_network
 
-# Định nghĩa Volumes
+  redis:
+    image: redis:7-alpine
+    container_name: dcho_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - dcho_network
+
+  backend:
+    build: ./backend
+    container_name: dcho_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/shopping_db
+      - SPRING_REDIS_HOST=redis
+    depends_on:
+      - db
+      - redis
+    networks:
+      - dcho_network
+
+  frontend:
+    build: ./frontend
+    container_name: dcho_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - dcho_network
+
 volumes:
-  db_data:
+  pgdata:
 
-# Định nghĩa Networks
 networks:
-  app-network:
+  dcho_network:
     driver: bridge
