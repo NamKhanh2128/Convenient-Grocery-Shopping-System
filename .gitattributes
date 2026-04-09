@@ -1,2 +1,12 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Môi trường
+.env
+
+# Thư mục build hoặc thư viện
+node_modules/
+__pycache__/
+venv/
+dist/
+build/
+
+# File hệ thống
+.DS_Store

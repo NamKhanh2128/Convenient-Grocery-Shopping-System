@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Service 1: Ứng dụng của bạn (Backend/Frontend)
+  web:
+    build: . # Build image từ Dockerfile trong thư mục hiện tại
+    # image: nginx:latest # Hoặc sử dụng image có sẵn thay vì build
+    container_name: my_web_app
+    ports:
+      - "8080:80" # Map cổng 8080 của máy host vào cổng 80 của container
+    volumes:
+      - .:/app # Đồng bộ code từ máy thật vào container để dev tiện lợi
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - db # Đảm bảo DB chạy trước khi Web chạy
+    networks:
+      - app-network
+
+  # Service 2: Cơ sở dữ liệu
+  db:
+    image: postgres:15-alpine
+    container_name: my_database
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: my_database_name
+    volumes:
+      - db_data:/var/lib/postgresql/data # Lưu trữ dữ liệu để không mất khi tắt container
+    networks:
+      - app-network
+
+# Định nghĩa Volumes
+volumes:
+  db_data:
+
+# Định nghĩa Networks
+networks:
+  app-network:
+    driver: bridge
