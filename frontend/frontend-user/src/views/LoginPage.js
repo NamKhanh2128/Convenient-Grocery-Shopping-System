@@ -30,11 +30,19 @@ const LoginPage = () => {
       return;
     }
 
-    AuthController.handleLogin(
-      { email: formData.email, password: formData.password },
-      (user) => { navigate('/dashboard'); },
-      (errs) => { setErrors(errs); setLoading(false); }
-    );
+    if (isLogin) {
+      AuthController.handleLogin(
+        { email: formData.email, password: formData.password },
+        (user) => { navigate('/dashboard'); },
+        (errs) => { setErrors(errs); setLoading(false); }
+      );
+    } else {
+      AuthController.handleRegister(
+        formData,
+        (user) => { navigate('/dashboard'); },
+        (errs) => { setErrors(errs); setLoading(false); }
+      );
+    }
   };
 
   return (
@@ -93,6 +101,11 @@ const LoginPage = () => {
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {errors._form && (
+              <div style={{ padding: '12px', background: '#FEE2E2', color: '#DC2626', borderRadius: '8px', fontSize: '13px', fontWeight: 500, textAlign: 'center' }}>
+                {errors._form}
+              </div>
+            )}
             {!isLogin && (
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#111111', marginBottom: '6px' }}>Họ tên</label>
