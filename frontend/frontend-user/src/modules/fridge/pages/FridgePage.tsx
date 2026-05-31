@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 export function FridgePage() {
   const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
-  const { items, load, remove, removeMany, update, loading } = useFridgeStore();
+  const { items, load, remove, removeMany, update, loading, error } = useFridgeStore();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [expiry, setExpiry] = useState("all");
@@ -35,6 +35,9 @@ export function FridgePage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   useEffect(() => { void load(family.family_id); }, [family.family_id, load]);
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error]);
 
   // Group items by food_id to detect duplicates
   const foodIdCounts = useMemo(() => {

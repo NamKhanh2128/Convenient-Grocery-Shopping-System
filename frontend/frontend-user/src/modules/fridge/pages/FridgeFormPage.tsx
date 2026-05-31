@@ -15,6 +15,7 @@ import { foodApi } from "@/shared/api/foodApi";
 import type { Food } from "@/types";
 import { foodLocations } from "@/shared/constants/options";
 import { fridgeFormSchema } from "../schema";
+import { getErrorMessage } from "@/shared/utils/errors";
 
 type Values = z.infer<typeof fridgeFormSchema>;
 
@@ -31,10 +32,14 @@ export function FridgeFormPage({ mode }: { mode: "add" | "edit" }) {
   useEffect(() => { if (current) reset({ food_id: current.food_id, quantity: current.quantity, expiry_date: current.expiry_date, location: current.location }); }, [current, reset]);
 
   async function onSubmit(values: Values) {
-    if (mode === "add") await create({ ...values, family_id: family.family_id });
-    else if (id) await update(id, values, family.family_id);
-    toast.success(mode === "add" ? "Đã lưu thực phẩm và cập nhật UI." : "Đã cập nhật thực phẩm.");
-    navigate("/fridge");
+    try {
+      if (mode === "add") await create({ ...values, family_id: family.family_id });
+      else if (id) await update(id, values, family.family_id);
+      toast.success(mode === "add" ? "Đã lưu thực phẩm và cập nhật UI." : "Đã cập nhật thực phẩm.");
+      navigate("/fridge");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
   }
 
   return (

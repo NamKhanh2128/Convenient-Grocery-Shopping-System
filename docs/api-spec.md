@@ -241,6 +241,41 @@ Request body:
 
 ---
 
+### 3.6 Fridge Module (implemented – `/api/fridge`)
+
+> Base path: `/api/fridge` · Auth: `Authorization: Bearer <jwt_token>`
+
+| Method | Path | Mô tả |
+|--------|------|--------|
+| GET | `/items` | Danh sách + filter + phân trang |
+| POST | `/items` | Thêm thực phẩm |
+| PUT | `/items/:id` | Cập nhật |
+| DELETE | `/items/:id` | Soft delete |
+| DELETE | `/items/bulk` | Xóa nhiều (`{ "ids": [] }`) |
+| PATCH | `/items/:id/quantity` | Dùng / nhập thêm (`use` \| `restock`) |
+| GET | `/items/expiring` | Sắp hết hạn (≤ 3 ngày) |
+| GET | `/items/export` | Xuất CSV (UTF-8 BOM) |
+| GET | `/items/available-ingredients` | Nguyên liệu cho gợi ý món ăn |
+
+#### GET `/api/fridge/items/available-ingredients`
+
+Dùng bởi module Recipe/Suggestion để lấy nguyên liệu còn trong tủ.
+
+Response (200):
+```json
+{
+  "success": true,
+  "data": {
+    "ingredients": [
+      { "name": "Đậu phụ", "quantity": 1, "unit": "miếng", "category": "Đồ khô" }
+    ]
+  },
+  "message": "Lấy nguyên liệu khả dụng thành công"
+}
+```
+
+---
+
 ## 4. Shopping List Endpoints
 
 ### 4.1 Get Shopping Lists
