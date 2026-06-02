@@ -50,6 +50,25 @@ function validateUpdateBody(body) {
 }
 
 class FridgeController {
+  static async getStorageSuggestion(req, res) {
+    try {
+      const name = String(req.query.name || '').trim();
+      const categoryName = String(req.query.categoryName || '').trim() || null;
+      if (!name) {
+        return res.status(400).json({ success: false, message: 'Thiếu tên thực phẩm để gợi ý bảo quản' });
+      }
+      const suggestion = FridgeItemModel.suggestStorageLocation(name, categoryName);
+      return res.status(200).json({
+        success: true,
+        data: { suggestion },
+        message: 'Lấy gợi ý bảo quản thành công',
+      });
+    } catch (error) {
+      console.error('[FridgeController.getStorageSuggestion]', error);
+      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy gợi ý bảo quản' });
+    }
+  }
+
   static async getItems(req, res) {
     try {
       const { userId, familyGroupId } = getUserContext(req);

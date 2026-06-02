@@ -16,6 +16,7 @@ import type { Food } from "@/types";
 import { foodLocations } from "@/shared/constants/options";
 import { fridgeFormSchema } from "../schema";
 import { getErrorMessage } from "@/shared/utils/errors";
+import { fridgeApi } from "../api/fridgeApi";
 
 type Values = z.infer<typeof fridgeFormSchema>;
 
@@ -25,11 +26,32 @@ export function FridgeFormPage({ mode }: { mode: "add" | "edit" }) {
   const family = useAuthStore((state) => state.family)!;
   const { items, load, create, update } = useFridgeStore();
   const [foods, setFoods] = useState<Food[]>([]);
+  const [suggestedLocation, setSuggestedLocation] = useState<{
+    location: Values["location"];
+    reason: string;
+    confidence: "high" | "medium" | "low";
+  } | null>(null);
   const current = useMemo(() => items.find((item) => item.fridge_item_id === id), [items, id]);
-  const { control, register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema), defaultValues: { food_id: "", quantity: 1, expiry_date: new Date().toISOString().slice(0, 10), location: "Ngăn mát" } });
+  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema), defaultValues: { food_id: "", quantity: 1, expiry_date: new Date().toISOString().slice(0, 10), location: "Ngăn mát" } });
+  const selectedFoodId = watch("food_id");
 
   useEffect(() => { void foodApi.list().then(setFoods); void load(family.family_id); }, [family.family_id, load]);
   useEffect(() => { if (current) reset({ food_id: current.food_id, quantity: current.quantity, expiry_date: current.expiry_date, location: current.location }); }, [current, reset]);
+  useEffect(() => {
+    const selectedFood = foods.find((food) => food.food_id === selectedFoodId);
+    if (!selectedFood) {
+      setSuggestedLocation(null);
+      return;
+    }
+    void fridgeApi
+      .getStorageSuggestion(selectedFood.food_name, selectedFood.category)
+      .then((suggestion) => {
+        setSuggestedLocation(suggestion);
+      })
+      .catch(() => {
+        setSuggestedLocation(null);
+      });
+  }, [selectedFoodId, foods]);
 
   async function onSubmit(values: Values) {
     try {
@@ -53,6 +75,23 @@ export function FridgeFormPage({ mode }: { mode: "add" | "edit" }) {
         <Input type="date" {...register("expiry_date")} />
         {errors.expiry_date && <p className="text-xs text-destructive">{errors.expiry_date.message}</p>}
         <Controller control={control} name="location" render={({ field }) => <Select value={field.value} onValueChange={field.onChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{foodLocations.map((loc) => <SelectItem key={loc} value={loc}>{loc}</SelectItem>)}</SelectContent></Select>} />
+        {suggestedLocation && (
+          <div className="rounded-md border border-[#d9d2ec] bg-[#f8f6fc] p-3 text-sm">
+            <p className="font-medium text-[#4f3b79]">
+              Gợi ý bảo quản: {suggestedLocation.location} ({suggestedLocation.confidence})
+            </p>
+            <p className="mt-1 text-[#6f6582]">{suggestedLocation.reason}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => setValue("location", suggestedLocation.location)}
+            >
+              Dùng gợi ý này
+            </Button>
+          </div>
+        )}
         <div className="flex gap-2"><Button disabled={isSubmitting} className="rounded-[8px] bg-[#7655aa]"><Save className="mr-2 h-4 w-4" />{isSubmitting ? "Đang lưu..." : "Lưu"}</Button></div>
       </form>
     </>

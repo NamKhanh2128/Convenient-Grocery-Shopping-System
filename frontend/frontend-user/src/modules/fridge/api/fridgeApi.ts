@@ -15,6 +15,11 @@ type BackendFridgeItem = {
   foodId?: string | null;
   category?: { id: string; name: string | null } | null;
   familyGroupId?: string | null;
+  suggestedStorage?: {
+    location: FoodLocation;
+    reason: string;
+    confidence: "high" | "medium" | "low";
+  } | null;
 };
 
 type ListResponse = {
@@ -23,6 +28,14 @@ type ListResponse = {
 
 type ItemResponse = {
   item: BackendFridgeItem;
+};
+
+type StorageSuggestionResponse = {
+  suggestion: {
+    location: FoodLocation;
+    reason: string;
+    confidence: "high" | "medium" | "low";
+  };
 };
 
 function validateInventoryPayload(
@@ -162,5 +175,17 @@ export const fridgeApi = {
   async removeMany(fridge_item_ids: string[]) {
     if (!fridge_item_ids.length) return;
     await apiClient.delete("/fridge/items/bulk", { data: { ids: fridge_item_ids } });
+  },
+
+  async getStorageSuggestion(name: string, categoryName?: string | null) {
+    const data = unwrapApiData<StorageSuggestionResponse>(
+      await apiClient.get("/fridge/storage-suggestion", {
+        params: {
+          name,
+          categoryName: categoryName || undefined,
+        },
+      }),
+    );
+    return data.suggestion;
   },
 };

@@ -40,6 +40,7 @@ function authMiddleware(req, res, next) {
 
 router.use(authMiddleware);
 
+router.get('/storage-suggestion', FridgeController.getStorageSuggestion);
 router.get('/items/expiring', FridgeController.getExpiring);
 router.get('/items/export', FridgeController.exportCsv);
 router.get('/items/available-ingredients', FridgeController.getAvailableIngredients);

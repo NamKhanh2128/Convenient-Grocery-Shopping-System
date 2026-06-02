@@ -2,7 +2,9 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const AuthController = require('./src/controllers/AuthController');
 const fridgeRoutes = require('./src/routes/fridgeRoutes');
+const shoppingRoutes = require('./src/routes/shoppingRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,6 +56,8 @@ app.get('/health/db', async (_req, res) => {
 });
 
 app.use('/api/fridge', fridgeRoutes);
+app.use('/auth', AuthController.router);
+app.use('/shopping-lists', shoppingRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('[UnhandledError]', err);

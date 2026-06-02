@@ -5,6 +5,7 @@ const { tables: t, columns: c } = schema;
 
 const STORAGE_LOCATIONS = ['Ngăn mát', 'Ngăn đá', 'Cửa tủ', 'Ngoài tủ', 'Ngăn đông', 'Kệ thường', 'Cánh tủ'];
 const DEFAULT_LOCATION = 'Ngăn mát';
+const STORAGE_TABLE = 'fridge_item_storage_locations';
 
 const SORT_COLUMNS = {
   name: `tp.${c.foodName}`,
@@ -21,6 +22,54 @@ function formatDate(value) {
 
 function isNumericId(value) {
   return /^\d+$/.test(String(value ?? ''));
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function suggestStorageLocation(name, categoryName) {
+  const n = normalizeText(name);
+  const cName = normalizeText(categoryName);
+
+  const hasKeyword = (keywords) => keywords.some((kw) => n.includes(kw) || cName.includes(kw));
+
+  if (hasKeyword(['thit', 'ca', 'hai san', 'tom', 'muc', 'bo vien', 'xuc xich'])) {
+    return {
+      location: 'Ngăn đông',
+      reason: 'Nhóm thịt/cá/hải sản nên để ngăn đông để giảm hư hỏng nhanh.',
+      confidence: 'high',
+    };
+  }
+  if (hasKeyword(['rau', 'cu', 'qua', 'trai cay', 'sua', 'trung', 'dau hu'])) {
+    return {
+      location: 'Ngăn mát',
+      reason: 'Rau củ, sữa và thực phẩm dùng sớm phù hợp bảo quản ngăn mát.',
+      confidence: 'high',
+    };
+  }
+  if (hasKeyword(['gia vi', 'hanh', 'toi', 'khoai', 'hanh tay', 'gao', 'mi'])) {
+    return {
+      location: 'Kệ thường',
+      reason: 'Thực phẩm khô/gia vị nên để nơi khô ráo, thoáng mát.',
+      confidence: 'medium',
+    };
+  }
+  if (hasKeyword(['nuoc sot', 'sot', 'mut', 'bo lac'])) {
+    return {
+      location: 'Ngăn mát',
+      reason: 'Nhóm sốt/mứt có thể để ngăn mát để ổn định và dễ lấy khi dùng thường xuyên.',
+      confidence: 'medium',
+    };
+  }
+  return {
+    location: DEFAULT_LOCATION,
+    reason: 'Chưa có rule đặc thù, ưu tiên bảo quản ngăn mát.',
+    confidence: 'low',
+  };
 }
 
 function mapRow(row, familyKey = null) {
@@ -40,7 +89,8 @@ function mapRow(row, familyKey = null) {
     category: row.category_id
       ? { id: String(row.category_id), name: row.category_name || null }
       : null,
-    storageLocation: DEFAULT_LOCATION,
+    storageLocation: row.storage_location || DEFAULT_LOCATION,
+    suggestedStorage: suggestStorageLocation(row.food_name, row.category_name || null),
     notes: null,
     familyGroupId: familyKey ?? (row.family_group_id != null ? String(row.family_group_id) : null),
     foodId,
@@ -65,6 +115,7 @@ const BASE_SELECT = `
   ctd.${c.expiry} AS expiry_date,
   tp.${c.categoryId} AS category_id,
   dm.${c.categoryName} AS category_name,
+  COALESCE(fsl.storage_location, '${DEFAULT_LOCATION}') AS storage_location,
   tl.${c.familyId} AS family_group_id,
   ctd.${c.importedAt} AS created_at,
   ctd.${c.importedAt} AS updated_at,
@@ -77,6 +128,7 @@ const BASE_FROM = `
   INNER JOIN ${t.food} tp ON ctd.${c.foodId} = tp.${c.foodId}
   LEFT JOIN ${t.category} dm ON tp.${c.categoryId} = dm.${c.categoryId}
   LEFT JOIN ${t.unit} dv ON tp.${c.unitId} = dv.${c.unitId}
+  LEFT JOIN ${STORAGE_TABLE} fsl ON fsl.${c.itemId} = ctd.${c.itemId}
 `;
 
 function accessClause(paramOffset = 1) {
@@ -86,6 +138,34 @@ function accessClause(paramOffset = 1) {
 class FridgeItemModel {
   static getStorageLocations() {
     return STORAGE_LOCATIONS;
+  }
+
+  static suggestStorageLocation(name, categoryName = null) {
+    return suggestStorageLocation(name, categoryName);
+  }
+
+  static async ensureStorageTable() {
+    await query(`
+      CREATE TABLE IF NOT EXISTS ${STORAGE_TABLE} (
+        ${c.itemId} INTEGER PRIMARY KEY REFERENCES ${t.item}(${c.itemId}) ON DELETE CASCADE,
+        storage_location VARCHAR(50) NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+
+  static async upsertStorageLocation(itemId, storageLocation) {
+    await this.ensureStorageTable();
+    const safeLocation = STORAGE_LOCATIONS.includes(storageLocation) ? storageLocation : DEFAULT_LOCATION;
+    await query(
+      `
+      INSERT INTO ${STORAGE_TABLE} (${c.itemId}, storage_location, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (${c.itemId})
+      DO UPDATE SET storage_location = EXCLUDED.storage_location, updated_at = NOW()
+      `,
+      [itemId, safeLocation],
+    );
   }
 
   /** Mock FE: family-1 → integer gia_dinh_id trên Supabase */
@@ -180,6 +260,7 @@ class FridgeItemModel {
   }
 
   static async findAll({ userId, familyGroupId, filters = {}, pagination = {} }) {
+    await this.ensureStorageTable();
     const giaDinhId = await this.resolveGiaDinhId(familyGroupId);
     const page = Math.max(1, Number(pagination.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(pagination.limit) || 20));
@@ -254,6 +335,7 @@ class FridgeItemModel {
   }
 
   static async findById(id, userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     const giaDinhId = await this.resolveGiaDinhId(familyGroupId);
     const itemId = isNumericId(id) ? Number(id) : id;
 
@@ -272,6 +354,7 @@ class FridgeItemModel {
   }
 
   static async create(data, userId) {
+    await this.ensureStorageTable();
     const giaDinhId = await this.resolveGiaDinhId(data.familyGroupId);
     const fridgeId = await this.resolveFridgeId(giaDinhId);
     const foodId = data.foodId && isNumericId(data.foodId)
@@ -292,11 +375,13 @@ class FridgeItemModel {
       `,
       [fridgeId, foodId, data.quantity, data.expiryDate],
     );
+    await this.upsertStorageLocation(result.rows[0].id, data.storageLocation);
 
     return this.findById(result.rows[0].id, userId, String(giaDinhId));
   }
 
   static async update(id, data, userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     const giaDinhId = await this.resolveGiaDinhId(familyGroupId);
     const itemId = isNumericId(id) ? Number(id) : id;
 
@@ -338,11 +423,15 @@ class FridgeItemModel {
         params,
       );
     }
+    if (data.storageLocation) {
+      await this.upsertStorageLocation(itemId, data.storageLocation);
+    }
 
     return this.findById(itemId, userId, String(giaDinhId));
   }
 
   static async softDelete(id, userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     const giaDinhId = familyGroupId ? await this.resolveGiaDinhId(familyGroupId) : null;
     const itemId = isNumericId(id) ? Number(id) : id;
 
@@ -363,6 +452,7 @@ class FridgeItemModel {
   }
 
   static async bulkSoftDelete(ids, userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     if (!ids.length) return 0;
     const giaDinhId = familyGroupId ? await this.resolveGiaDinhId(familyGroupId) : null;
     const numericIds = ids.map((id) => (isNumericId(id) ? Number(id) : id));
@@ -384,6 +474,7 @@ class FridgeItemModel {
   }
 
   static async updateQuantity(id, quantityUsed, action, userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     const giaDinhId = familyGroupId ? await this.resolveGiaDinhId(familyGroupId) : null;
     const itemId = isNumericId(id) ? Number(id) : id;
 
@@ -443,6 +534,7 @@ class FridgeItemModel {
   }
 
   static async findForExport(userId, familyGroupId = null) {
+    await this.ensureStorageTable();
     const giaDinhId = await this.resolveGiaDinhId(familyGroupId);
     const result = await query(
       `
@@ -452,6 +544,7 @@ class FridgeItemModel {
         COALESCE(dv.${c.unitName}, '') AS unit,
         ctd.${c.expiry} AS expiry_date,
         dm.${c.categoryName} AS category_name,
+        COALESCE(fsl.storage_location, '${DEFAULT_LOCATION}') AS storage_location,
         ctd.${c.importedAt} AS created_at
       ${BASE_FROM}
       WHERE ${accessClause(1)}
