@@ -1,7 +1,7 @@
 import { CheckCircle2, Circle, PackageCheck, Trash2, X, Info } from "lucide-react";
 import { useT } from "@/shared/store/languageStore";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { useShoppingStore } from "@/modules/shopping/store/shoppingStore";
@@ -29,8 +29,9 @@ type GroupedItem = {
 
 export function ShoppingDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
-  const { lists, load, recordPurchase, deleteItems, complete } = useShoppingStore();
+  const { lists, loadDetail, recordPurchase, deleteItems, deleteList, complete } = useShoppingStore();
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteMode, setDeleteMode] = useState(false);
@@ -48,14 +49,12 @@ export function ShoppingDetailPage() {
   );
 
   useEffect(() => {
-    void load(family.family_id);
+    if (id) void loadDetail(id, family.family_id);
     void fridgeApi.list(family.family_id).then(setFridgeItems);
-  }, [family.family_id, load]);
+  }, [family.family_id, id, loadDetail]);
 
-  if (!list) return <ScreenHeader title="Đang tải danh sách" />;
-
-  // Group items by food_name
   const grouped: GroupedItem[] = useMemo(() => {
+    if (!list) return [];
     const map = new Map<string, GroupedItem>();
     for (const item of list.items) {
       const key = item.food.food_name;
@@ -76,7 +75,9 @@ export function ShoppingDetailPage() {
       g.items.push(item);
     }
     return Array.from(map.values());
-  }, [list.items]);
+  }, [list?.items]);
+
+  if (!list) return <ScreenHeader title="Đang tải danh sách" />;
 
   // Derive overall status for a group
   function groupStatus(g: GroupedItem) {
@@ -110,7 +111,7 @@ export function ShoppingDetailPage() {
     if (!checkingId || !list) return;
     setSubmitting(true);
     try {
-      await recordPurchase(checkingId, quantity, family.family_id);
+      await recordPurchase(checkingId, quantity, family.family_id, id);
       const item = list.items.find((row) => row.id === checkingId);
       const status = quantity >= (item?.quantity ?? 0) ? "completed" : "partial";
       toast.success(`Đã cập nhật ${status}. Inventory +${quantity}.`);
@@ -134,9 +135,21 @@ export function ShoppingDetailPage() {
     if (!list) return;
     try {
       await complete(list.shopping_list_id, family.family_id);
-      toast.success("Danh sách đã hoàn tất.");
+      toast.success("Đã hoàn tất mua sắm và cập nhật tủ lạnh.");
+      navigate("/fridge");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Danh sách còn mặt hàng partial hoặc pending.");
+    }
+  }
+
+  async function confirmDeleteList() {
+    if (!list) return;
+    try {
+      await deleteList(list.shopping_list_id, family.family_id);
+      toast.success("Đã xóa danh sách mua sắm.");
+      navigate("/shopping");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể xóa danh sách.");
     }
   }
 
@@ -171,6 +184,14 @@ export function ShoppingDetailPage() {
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
               {deleteButtonLabel}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-200 text-red-600 hover:bg-red-50"
+              onClick={() => void confirmDeleteList()}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Xóa list
             </Button>
             <Button
               disabled={!allCompleted || submitting}

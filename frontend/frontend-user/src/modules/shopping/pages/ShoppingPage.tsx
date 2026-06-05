@@ -1,26 +1,30 @@
-﻿import { ClipboardCheck, Plus, ShoppingCart } from "lucide-react";
+﻿import { ClipboardCheck, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { useShoppingStore } from "@/modules/shopping/store/shoppingStore";
 import { ScreenHeader } from "@/shared/components/ScreenHeader";
 import { AppModal } from "@/shared/components/AppModal";
 import { Button } from "@/components/ui/button";
-import { formatDate, todayIso } from "@/shared/utils/date";
+import { formatDate } from "@/shared/utils/date";
 
 type Tab = "today" | "week" | "done";
 
 export function ShoppingPage() {
   const family = useAuthStore((state) => state.family)!;
-  const { lists, load, complete, loading } = useShoppingStore();
+  const location = useLocation();
+  const highlightId = (location.state as { highlightId?: string } | null)?.highlightId;
+  const { lists, load, complete, deleteList, loading } = useShoppingStore();
   const [tab, setTab] = useState<Tab>("today");
   const [completeId, setCompleteId] = useState<string | null>(null);
   useEffect(() => { void load(family.family_id); }, [family.family_id, load]);
 
   const filtered = useMemo(() => lists.filter((list) => {
     if (tab === "done") return list.status === "DONE";
-    if (tab === "today") return list.plan_date === todayIso() && list.status !== "DONE";
+    if (tab === "today") {
+      return list.list_type !== "weekly" && list.status !== "DONE";
+    }
     return list.list_type === "weekly" && list.status !== "DONE";
   }), [lists, tab]);
 
@@ -30,6 +34,15 @@ export function ShoppingPage() {
       toast.success("Danh sách đã hoàn tất.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Danh sách còn item partial hoặc pending.");
+    }
+  }
+
+  async function removeList(id: string) {
+    try {
+      await deleteList(id, family.family_id);
+      toast.success("Đã xóa danh sách.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể xóa danh sách.");
     }
   }
 
@@ -57,7 +70,10 @@ export function ShoppingPage() {
           const progress = list.items.length ? Math.round((completed / list.items.length) * 100) : 0;
           const assigned = list.assigned_user_id ? "Đã phân công" : "Chưa phân công";
           return (
-            <section key={list.shopping_list_id} className="rounded-[8px] bg-white p-5 shadow-card">
+            <section
+              key={list.shopping_list_id}
+              className={`rounded-[8px] bg-white p-5 shadow-card${highlightId === list.shopping_list_id ? " ring-2 ring-[#ffb11f]" : ""}`}
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-[240px] flex-1">
                   <h3 className="text-xl font-extrabold">{list.title}</h3>
@@ -67,6 +83,9 @@ export function ShoppingPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button asChild variant="outline" className="rounded-[8px]"><Link to={`/shopping/${list.shopping_list_id}`}><ShoppingCart className="mr-2 h-4 w-4" />Xem</Link></Button>
                   <Button onClick={() => setCompleteId(list.shopping_list_id)} className="rounded-[8px] bg-[#31c875]" disabled={list.status === "DONE" || progress < 100}>Hoàn tất</Button>
+                  <Button variant="outline" className="rounded-[8px] border-red-200 text-red-600" onClick={() => void removeList(list.shopping_list_id)}>
+                    <Trash2 className="mr-2 h-4 w-4" />Xóa
+                  </Button>
                 </div>
               </div>
             </section>

@@ -6,6 +6,16 @@ export function todayIso() {
   return localIso(new Date());
 }
 
+/** Chuẩn hóa plan_date từ API (DATE hoặc ISO timestamp) về yyyy-MM-dd theo giờ local. */
+export function normalizePlanDate(value?: string | null): string {
+  if (!value) return todayIso();
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return todayIso();
+  return localIso(parsed);
+}
+
 export function addDaysIso(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);

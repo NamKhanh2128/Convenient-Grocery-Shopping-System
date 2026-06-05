@@ -27,17 +27,26 @@ export function DashboardPage() {
   const t = useT();
 
   useEffect(() => {
-    void Promise.all([
-      fridgeApi.list(family.family_id).then(setFridge),
-      shoppingApi.list(family.family_id).then(setShopping),
-      mealApi.grouped(family.family_id).then(setMeals),
-      recipeApi.list().then(setRecipes),
-      recipeApi.suggestions(family.family_id).then(setSuggestions),
-      familyApi.detail(family.family_id).then((data) => {
-        setActivities([...data.activities].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 4));
-        setMembers(data.members);
-      }),
-    ]);
+    const fid = family.family_id;
+    void Promise.allSettled([
+      fridgeApi.list(fid),
+      shoppingApi.list(fid),
+      mealApi.grouped(fid),
+      recipeApi.list(fid, undefined, { lite: true }),
+    ]).then(([fridgeRes, shopRes, mealsRes, recipesRes]) => {
+      if (fridgeRes.status === "fulfilled") setFridge(fridgeRes.value);
+      if (shopRes.status === "fulfilled") setShopping(shopRes.value);
+      if (mealsRes.status === "fulfilled") setMeals(mealsRes.value);
+      if (recipesRes.status === "fulfilled") setRecipes(recipesRes.value);
+    });
+    void recipeApi.suggestions(fid).then(setSuggestions).catch(() => setSuggestions([]));
+    void familyApi.detail(fid).then((data) => {
+      setActivities([...data.activities].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 4));
+      setMembers(data.members);
+    }).catch(() => {
+      setActivities([]);
+      setMembers([]);
+    });
   }, [family.family_id]);
 
   const suggestion = suggestions[0];

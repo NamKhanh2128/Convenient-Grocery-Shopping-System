@@ -1,4 +1,5 @@
 const { query: dbQuery } = require('../config/db');
+const FridgeItemModel = require('./FridgeItemModel');
 
 class ShoppingModel {
   async list(familyId, status = 'active') {
@@ -43,6 +44,7 @@ class ShoppingModel {
   }
 
   async deleteList(listId) {
+    await dbQuery(`DELETE FROM shopping_list_items WHERE shopping_list_id = $1`, [listId]);
     await dbQuery(`DELETE FROM shopping_lists WHERE id = $1`, [listId]);
   }
 
@@ -66,7 +68,29 @@ class ShoppingModel {
     return rows;
   }
 
+  async listItemsForLists(listIds) {
+    if (!listIds.length) return [];
+    const { rows } = await dbQuery(
+      `SELECT sli.id, sli.shopping_list_id, sli.food_id, sli.name, sli.quantity,
+              sli.unit_id, sli.category_id, sli.is_purchased, sli.purchased_by, sli.purchased_at,
+              sli.bought_quantity, sli.remaining_quantity, sli.item_status,
+              sli.inventory_synced_quantity, sli.bought_status, sli.created_at,
+              f.food_name AS food_name, f.icon AS food_icon,
+              u.symbol AS unit_symbol, u.name AS unit_name,
+              fc.name_vi AS category_name_vi, fc.name_en AS category_name_en
+       FROM shopping_list_items sli
+       LEFT JOIN foods f ON sli.food_id = f.id
+       LEFT JOIN units u ON sli.unit_id = u.id
+       LEFT JOIN food_categories fc ON sli.category_id = fc.id
+       WHERE sli.shopping_list_id = ANY($1::int[])
+       ORDER BY sli.shopping_list_id, sli.created_at ASC`,
+      [listIds],
+    );
+    return rows;
+  }
+
   async insertItem({ shoppingListId, foodId, name, quantity, unitId, categoryId, boughtQuantity = 0, itemStatus = 'PENDING' }) {
+    const safeName = String(name || '').trim() || `Mặt hàng #${foodId}`;
     const { rows } = await dbQuery(
       `INSERT INTO shopping_list_items
        (shopping_list_id, food_id, name, quantity, unit_id, category_id,
@@ -76,7 +100,7 @@ class ShoppingModel {
       [
         shoppingListId,
         foodId,
-        name,
+        safeName,
         quantity,
         unitId,
         categoryId,
@@ -89,13 +113,15 @@ class ShoppingModel {
     return rows[0].id;
   }
 
-  async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased) {
+  async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity) {
     await dbQuery(
       `UPDATE shopping_list_items
        SET bought_quantity = $1, remaining_quantity = $2, item_status = $3, is_purchased = $4,
-           purchased_at = CASE WHEN $5 = TRUE THEN NOW() ELSE purchased_at END
-       WHERE id = $6`,
-      [boughtQuantity, remainingQuantity, itemStatus, isPurchased, isPurchased, itemId]
+           bought_status = $4,
+           inventory_synced_quantity = $5,
+           purchased_at = CASE WHEN $6 = TRUE THEN NOW() ELSE purchased_at END
+       WHERE id = $7`,
+      [boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, isPurchased, itemId]
     );
   }
 
@@ -125,6 +151,14 @@ class ShoppingModel {
     return rows[0] || null;
   }
 
+  async findFoodById(foodId) {
+    const { rows } = await dbQuery(
+      `SELECT id, food_name, unit_id, category_id, icon FROM foods WHERE id = $1`,
+      [Number(foodId)],
+    );
+    return rows[0] || null;
+  }
+
   async insertFood({ foodName, unitId, categoryId, icon = '🧺' }) {
     const { rows } = await dbQuery(
       `INSERT INTO foods (food_name, unit_id, category_id, icon) VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -149,16 +183,33 @@ class ShoppingModel {
     return rows.map((r) => r.user_id);
   }
 
-  async insertInventoryEntry({ familyId, foodId, quantity }) {
-    const { rows: foodRows } = await dbQuery(
-      `SELECT food_name, unit_id, category_id FROM foods WHERE id = $1`,
-      [foodId]
-    );
+  async insertInventoryEntry({ familyId, userId, foodId, foodName, quantity, unitSymbol }) {
+    const { rows: foodRows } = foodId
+      ? await dbQuery(
+          `SELECT f.food_name, u.name AS unit_name
+           FROM foods f
+           LEFT JOIN units u ON f.unit_id = u.id
+           WHERE f.id = $1`,
+          [foodId],
+        )
+      : { rows: [] };
     const food = foodRows[0];
-    await dbQuery(
-      `INSERT INTO fridge_items (user_id, name, quantity, unit_id, category_id, expiration_date, storage_location)
-       VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days', 'fridge')`,
-      [familyId, food ? food.food_name : 'Mặt hàng mua', quantity, food ? food.unit_id : 1, food ? food.category_id : 1]
+    const name = food?.food_name || foodName || 'Mặt hàng mua';
+    const unit = food?.unit_name || unitSymbol || 'g';
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 7);
+    const expiryDate = expiry.toISOString().slice(0, 10);
+
+    await FridgeItemModel.create(
+      {
+        familyGroupId: String(familyId),
+        name,
+        quantity: Number(quantity) || 1,
+        unit,
+        expiryDate,
+        storageLocation: 'Ngăn mát',
+      },
+      userId,
     );
   }
 

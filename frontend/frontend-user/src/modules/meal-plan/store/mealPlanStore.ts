@@ -1,189 +1,308 @@
 import { create } from "zustand";
+
 import type { MealPlanGroup, RecipeSuggestion } from "@/types";
+
 import type { RecipeDetail } from "@/modules/recipe/api/recipeApi";
+
 import { mealApi } from "@/modules/meal-plan/api/mealApi";
+
 import { recipeApi } from "@/modules/recipe/api/recipeApi";
-import { uid } from "@/shared/utils/storage";
-import { db, saveDb, addActivity, getSession } from "@/shared/lib/mockDb";
+
+
 
 export type ViewMode = "calendar" | "schedule";
+
 export type MealSlot = "Sáng" | "Trưa" | "Tối";
 
+
+
 function getMondayOfWeek(anchor: Date): Date {
+
   const d = new Date(anchor);
+
   const day = d.getDay();
+
   const diff = day === 0 ? -6 : 1 - day;
+
   d.setDate(d.getDate() + diff);
+
   d.setHours(0, 0, 0, 0);
+
   return d;
+
 }
+
+
 
 function localIso(date: Date): string {
+
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
 }
+
+
 
 function getWeekDays(monday: Date): string[] {
+
   return Array.from({ length: 7 }, (_, i) => {
+
     const d = new Date(monday);
+
     d.setDate(d.getDate() + i);
+
     return localIso(d);
+
   });
+
 }
+
+
 
 interface MealPlanState {
+
   viewMode: ViewMode;
+
   weekAnchor: Date;
+
   weekDays: string[];
+
   groups: MealPlanGroup[];
+
   recipes: RecipeDetail[];
+
   suggestions: RecipeSuggestion[];
+
   loading: boolean;
+
   familyId: string | null;
 
-  // Dialog state
   editingDate: string | null;
+
   editingSlot: MealSlot | null;
 
-  // Actions
   setViewMode: (mode: ViewMode) => void;
+
   loadWeek: (familyId: string, anchor?: Date) => Promise<void>;
+
   prevWeek: () => void;
+
   nextWeek: () => void;
+
   goToCurrentWeek: () => void;
+
   openEdit: (date: string, slot: MealSlot) => void;
+
   closeEdit: () => void;
+
   addRecipeToSlot: (date: string, slot: MealSlot, recipeId: string) => Promise<void>;
+
   removeRecipeFromSlot: (date: string, slot: MealSlot, recipeId: string) => Promise<void>;
+
   replaceRecipeInSlot: (date: string, slot: MealSlot, oldRecipeId: string, newRecipeId: string) => Promise<void>;
+
   removeSuggestion: (recipeId: string) => void;
+
   getSlotRecipes: (date: string, slot: MealSlot) => RecipeDetail[];
+
   getMissingForRecipe: (recipeId: string) => RecipeSuggestion["missing"];
+
   createShoppingFromMissing: (familyId: string, userId: string) => Promise<void>;
+
 }
 
+
+
 export const useMealPlanStore = create<MealPlanState>((set, get) => ({
+
   viewMode: "calendar",
+
   weekAnchor: new Date(),
+
   weekDays: getWeekDays(getMondayOfWeek(new Date())),
+
   groups: [],
+
   recipes: [],
+
   suggestions: [],
+
   loading: false,
+
   familyId: null,
+
   editingDate: null,
+
   editingSlot: null,
+
+
 
   setViewMode: (mode) => set({ viewMode: mode }),
 
+
+
   loadWeek: async (familyId, anchor) => {
+
     const base = anchor ?? get().weekAnchor;
+
     const monday = getMondayOfWeek(base);
+
     const days = getWeekDays(monday);
+
     set({ loading: true, weekAnchor: base, weekDays: days, familyId });
+
     try {
-      const [groups, recipes, suggestions] = await Promise.all([
-        mealApi.grouped(familyId),
-        recipeApi.list(),
-        recipeApi.suggestions(familyId),
+
+      const [groups, recipes] = await Promise.all([
+
+        mealApi.grouped(familyId, { from: days[0], to: days[6] }),
+
+        recipeApi.list(familyId, undefined, { lite: true }),
+
       ]);
-      set({ groups, recipes, suggestions, loading: false });
+
+      set({ groups, recipes, loading: false });
+
+      void recipeApi.suggestions(familyId).then((suggestions) => {
+
+        set({ suggestions });
+
+      }).catch(() => set({ suggestions: [] }));
+
     } catch {
+
       set({ loading: false });
+
     }
+
   },
+
+
 
   prevWeek: () => {
+
     const { weekAnchor, familyId } = get();
+
     const prev = new Date(weekAnchor);
+
     prev.setDate(prev.getDate() - 7);
-    if (familyId) get().loadWeek(familyId, prev);
+
+    if (familyId) void get().loadWeek(familyId, prev);
+
   },
+
+
 
   nextWeek: () => {
+
     const { weekAnchor, familyId } = get();
+
     const next = new Date(weekAnchor);
+
     next.setDate(next.getDate() + 7);
-    if (familyId) get().loadWeek(familyId, next);
+
+    if (familyId) void get().loadWeek(familyId, next);
+
   },
 
+
+
   goToCurrentWeek: () => {
+
     const { familyId } = get();
-    if (familyId) get().loadWeek(familyId, new Date());
+
+    if (familyId) void get().loadWeek(familyId, new Date());
+
   },
+
+
 
   openEdit: (date, slot) => set({ editingDate: date, editingSlot: slot }),
 
   closeEdit: () => set({ editingDate: null, editingSlot: null }),
 
+
+
   addRecipeToSlot: async (date, slot, recipeId) => {
+
     const { familyId } = get();
+
     if (!familyId) return;
-    const state = await db();
-    const exists = state.meal_plans.some(
-      (p) => p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === recipeId,
-    );
-    if (!exists) {
-      state.meal_plans.push({
-        meal_plan_id: uid("meal"),
-        family_id: familyId,
-        meal_date: date,
-        meal_type: slot,
-        recipe_id: recipeId,
-      });
-      const session = getSession();
-      if (session) addActivity(state, familyId, session.user_id, "meal", "thêm món vào kế hoạch bữa ăn");
-      saveDb(state);
-    }
+
+    await mealApi.add(familyId, date, slot, recipeId);
+
     await get().loadWeek(familyId);
+
   },
+
+
 
   removeRecipeFromSlot: async (date, slot, recipeId) => {
+
     const { familyId } = get();
+
     if (!familyId) return;
-    const state = await db();
-    state.meal_plans = state.meal_plans.filter(
-      (p) => !(p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === recipeId),
-    );
-    const session = getSession();
-    if (session) addActivity(state, familyId, session.user_id, "meal", "xóa món khỏi kế hoạch bữa ăn");
-    saveDb(state);
+
+    await mealApi.remove(familyId, date, slot, recipeId);
+
     await get().loadWeek(familyId);
+
   },
+
+
 
   replaceRecipeInSlot: async (date, slot, oldRecipeId, newRecipeId) => {
+
     const { familyId } = get();
+
     if (!familyId) return;
-    const state = await db();
-    state.meal_plans = state.meal_plans.filter(
-      (p) => !(p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === oldRecipeId),
-    );
-    if (!state.meal_plans.some((p) => p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === newRecipeId)) {
-      state.meal_plans.push({ meal_plan_id: uid("meal"), family_id: familyId, meal_date: date, meal_type: slot, recipe_id: newRecipeId });
-    }
-    const session = getSession();
-    if (session) addActivity(state, familyId, session.user_id, "meal", "thay thế món trong kế hoạch bữa ăn");
-    saveDb(state);
+
+    await mealApi.replace(familyId, date, slot, oldRecipeId, newRecipeId);
+
     await get().loadWeek(familyId);
+
   },
+
+
 
   removeSuggestion: (recipeId) => set((state) => ({
+
     suggestions: state.suggestions.filter((suggestion) => suggestion.recipe.recipe_id !== recipeId),
+
   })),
 
+
+
   getSlotRecipes: (date, slot) => {
+
     const { groups, recipes } = get();
+
     const group = groups.find((g) => g.meal_date === date && g.meal_type === slot);
+
     if (!group) return [];
+
     return group.recipe_ids.map((id) => recipes.find((r) => r.recipe_id === id)).filter(Boolean) as RecipeDetail[];
+
   },
+
+
 
   getMissingForRecipe: (recipeId) => {
+
     const { suggestions } = get();
+
     return suggestions.find((s) => s.recipe.recipe_id === recipeId)?.missing ?? [];
+
   },
 
+
+
   createShoppingFromMissing: async (familyId, userId) => {
+
     await mealApi.createShoppingListForMissing(familyId, userId, "Nguyên liệu thiếu từ kế hoạch bữa ăn");
+
     await get().loadWeek(familyId);
+
   },
+
 }));
+

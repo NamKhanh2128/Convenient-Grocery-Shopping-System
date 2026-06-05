@@ -4,7 +4,10 @@ const express = require('express');
 const cors = require('cors');
 const AuthController = require('./src/controllers/AuthController');
 const fridgeRoutes = require('./src/routes/fridgeRoutes');
+const recipeRoutes = require('./src/routes/recipeRoutes');
 const shoppingRoutes = require('./src/routes/shoppingRoutes');
+const foodRoutes = require('./src/routes/foodRoutes');
+const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,13 +59,29 @@ app.get('/health/db', async (_req, res) => {
 });
 
 app.use('/api/fridge', fridgeRoutes);
+app.use('/api/recipes', recipeRoutes);
+app.use('/api/shopping-lists', shoppingRoutes);
+app.use('/api/foods', foodRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/auth', AuthController.router);
 app.use('/shopping-lists', shoppingRoutes);
+app.use('/foods', foodRoutes);
+app.use('/meal-plans', mealPlanRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('[UnhandledError]', err);
   res.status(500).json({ success: false, message: 'Lỗi server nội bộ' });
 });
+
+const RecipeModel = require('./src/models/RecipeModel');
+const MealPlanModel = require('./src/models/MealPlanModel');
+
+Promise.all([
+  RecipeModel.ensureRecipeTables(),
+  MealPlanModel.ensureTable(),
+])
+  .then(() => console.log('[startup] Schema warmup ready'))
+  .catch((err) => console.warn('[startup] Schema warmup:', err.message));
 
 const server = app.listen(PORT, () => {
   console.log(`NATEAT API listening on http://localhost:${PORT}`);

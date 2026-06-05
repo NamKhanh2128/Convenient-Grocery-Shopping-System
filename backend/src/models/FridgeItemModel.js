@@ -135,7 +135,11 @@ function accessClause(paramOffset = 1) {
   return `tl.${c.familyId} = $${paramOffset}`;
 }
 
+let storageTableReady = false;
+let referenceDataReady = false;
+
 class FridgeItemModel {
+  static _giaDinhCache = new Map();
   static getStorageLocations() {
     return STORAGE_LOCATIONS;
   }
@@ -145,6 +149,7 @@ class FridgeItemModel {
   }
 
   static async ensureStorageTable() {
+    if (storageTableReady) return;
     await query(`
       CREATE TABLE IF NOT EXISTS ${STORAGE_TABLE} (
         ${c.itemId} INTEGER PRIMARY KEY REFERENCES ${t.item}(${c.itemId}) ON DELETE CASCADE,
@@ -152,6 +157,7 @@ class FridgeItemModel {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    storageTableReady = true;
   }
 
   static async upsertStorageLocation(itemId, storageLocation) {
@@ -170,24 +176,38 @@ class FridgeItemModel {
 
   /** Mock FE: family-1 → integer gia_dinh_id trên Supabase */
   static async resolveGiaDinhId(familyGroupId) {
+    const cacheKey = String(familyGroupId ?? '');
+    if (FridgeItemModel._giaDinhCache.has(cacheKey)) {
+      return FridgeItemModel._giaDinhCache.get(cacheKey);
+    }
     if (isNumericId(familyGroupId)) {
-      return Number(familyGroupId);
+      const id = Number(familyGroupId);
+      FridgeItemModel._giaDinhCache.set(cacheKey, id);
+      return id;
     }
 
     const byName = await query(
       `SELECT ${c.familyId} AS id FROM ${t.family} WHERE ${c.familyName} = $1 LIMIT 1`,
       [schema.defaultFamilyName],
     );
-    if (byName.rows[0]) return byName.rows[0].id;
+    if (byName.rows[0]) {
+      FridgeItemModel._giaDinhCache.set(cacheKey, byName.rows[0].id);
+      return byName.rows[0].id;
+    }
 
     const any = await query(`SELECT ${c.familyId} AS id FROM ${t.family} ORDER BY ${c.familyId} LIMIT 1`);
-    if (any.rows[0]) return any.rows[0].id;
+    if (any.rows[0]) {
+      FridgeItemModel._giaDinhCache.set(cacheKey, any.rows[0].id);
+      return any.rows[0].id;
+    }
 
     const created = await query(
       `INSERT INTO ${t.family} (${c.familyName}) VALUES ($1) RETURNING ${c.familyId} AS id`,
       [schema.defaultFamilyName],
     );
-    return created.rows[0].id;
+    const id = created.rows[0].id;
+    FridgeItemModel._giaDinhCache.set(cacheKey, id);
+    return id;
   }
 
   static async resolveFridgeId(giaDinhId) {
@@ -205,6 +225,7 @@ class FridgeItemModel {
   }
 
   static async ensureReferenceData() {
+    if (referenceDataReady) return;
     const catCount = await query(`SELECT COUNT(*)::int AS c FROM ${t.category}`);
     if ((catCount.rows[0]?.c ?? 0) === 0) {
       await query(`INSERT INTO ${t.category} (${c.categoryName}) VALUES ('Đồ khô'), ('Rau củ'), ('Thịt cá')`);
@@ -215,6 +236,7 @@ class FridgeItemModel {
         `INSERT INTO ${t.unit} (${c.unitName}) VALUES ('kg'), ('g'), ('lít'), ('quả'), ('miếng'), ('gói')`,
       );
     }
+    referenceDataReady = true;
   }
 
   static async findOrCreateFood({ name, unit, categoryId }) {

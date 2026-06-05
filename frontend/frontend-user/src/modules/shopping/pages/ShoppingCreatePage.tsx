@@ -41,6 +41,7 @@ export function ShoppingCreatePage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savedListId, setSavedListId] = useState<string | null>(null);
+  const [createdListId, setCreatedListId] = useState<string | null>(null);
 
   useEffect(() => {
     void foodApi.list().then(setFoods);
@@ -93,7 +94,7 @@ export function ShoppingCreatePage() {
     }
     setSubmitting(true);
     try {
-      await create({
+      const list = await create({
         family_id: family.family_id,
         title,
         list_type: listType,
@@ -103,9 +104,10 @@ export function ShoppingCreatePage() {
         share_member_ids: members.length ? selectedMemberIds : undefined,
       });
       toast.success("Tạo danh sách thành công");
-      setSavedListId("saved");
+      setSavedListId(list.shopping_list_id);
+      setCreatedListId(list.shopping_list_id);
       if (members.length > 1) setShareOpen(true);
-      else navigate("/shopping");
+      else navigate(`/shopping/${list.shopping_list_id}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Không thể tạo danh sách.");
     } finally {
@@ -248,8 +250,11 @@ export function ShoppingCreatePage() {
         title="Chia sẻ danh sách"
         primaryLabel="Chia sẻ"
         secondaryLabel="Bỏ qua"
-        onPrimary={() => { toast.success("Đã chia sẻ danh sách cho các thành viên."); navigate("/shopping"); }}
-        onSecondary={() => navigate("/shopping")}
+        onPrimary={() => {
+          toast.success("Đã chia sẻ danh sách cho các thành viên.");
+          navigate(createdListId ? `/shopping/${createdListId}` : "/shopping");
+        }}
+        onSecondary={() => navigate(createdListId ? `/shopping/${createdListId}` : "/shopping")}
       >
         <div className="space-y-2">
           {members.map((member) => (

@@ -11,6 +11,11 @@ import { ShoppingCreatePage } from "@/modules/shopping/pages/ShoppingCreatePage"
 import { ShoppingDetailPage } from "@/modules/shopping/pages/ShoppingDetailPage";
 import { MealPlanPage } from "@/modules/meal-plan/pages/MealPlanPage";
 import { RecipeDetailPage } from "@/modules/recipe/pages/RecipeDetailPage";
+import { RecipeListPage } from "@/modules/recipe/pages/RecipeListPage";
+import { RecipeFormPage } from "@/modules/recipe/pages/RecipeFormPage";
+import { RecipeFavoritesPage } from "@/modules/recipe/pages/RecipeFavoritesPage";
+import { RecipePublicPage } from "@/modules/recipe/pages/RecipePublicPage";
+import { RecipeSuggestionsPage } from "@/modules/recipe/pages/RecipeSuggestionsPage";
 import { FamilyPage } from "@/modules/family/pages/FamilyPage";
 import { ProfilePage } from "@/modules/auth/pages/ProfilePage";
 import { ChangePasswordPage } from "@/modules/auth/pages/ChangePasswordPage";
@@ -54,10 +59,14 @@ export function AppRouter() {
           <Route path="/meal-plan/calendar" element={<Navigate to="/meal-planner" replace />} />
           <Route path="/meal-planner/create" element={<Navigate to="/meal-planner" replace />} />
           <Route path="/meal-planner/calendar" element={<Navigate to="/meal-planner" replace />} />
+          <Route path="/recipes" element={<RecipeListPage />} />
+          <Route path="/recipes/explore" element={<RecipePublicPage />} />
+          <Route path="/recipes/suggestions" element={<RecipeSuggestionsPage />} />
+          <Route path="/recipes/add" element={<RecipeFormPage />} />
+          <Route path="/recipes/edit/:id" element={<RecipeFormPage />} />
           <Route path="/recipes/:id" element={<RecipeDetailPage />} />
-          <Route path="/suggestions" element={<Navigate to="/meal-planner" replace />} />
-          <Route path="/recipes" element={<Navigate to="/meal-planner" replace />} />
-          <Route path="/favorites" element={<Navigate to="/meal-planner" replace />} />
+          <Route path="/favorites" element={<RecipeFavoritesPage />} />
+          <Route path="/suggestions" element={<Navigate to="/recipes/suggestions" replace />} />
           <Route path="/statistics" element={<StatisticsPage />} />
           <Route path="/family" element={<FamilyPage />} />
           <Route path="/profile" element={<ProfilePage />} />
