@@ -1,97 +1,185 @@
-import { endpoints } from "@/shared/constants/endpoints";
 import type { Family, FamilyActivity, User } from "@/types";
-import { db, saveDb } from "@/shared/lib/mockDb";
-import { uid } from "@/shared/utils/storage";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const ACCESS_TOKEN_KEY = "nateat.token";
+
+type ApiResponse<T> = {
+  success: boolean;
+  data: T;
+  message?: string;
+};
+
+type FamilyDto = {
+  id?: string;
+  name?: string;
+  code?: string;
+  createdAt?: string;
+  family_id?: string;
+  family_name?: string;
+  family_code?: string;
+  created_at?: string;
+};
+
+export type SentFamilyInvitation = {
+  id: number;
+  invitationId: number;
+  groupId: string;
+  invitedUserId: string;
+  status: string;
+  createdAt: string;
+  email: string;
+  fullName: string;
+};
+
+export type ReceivedFamilyInvitation = {
+  id: number;
+  invitationId: number;
+  groupId: string;
+  status: string;
+  createdAt: string;
+  familyName: string;
+  familyCode: string;
+  inviterName: string;
+};
+
+function getToken() {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const method = options.method ?? "GET";
+  const isGet = method.toUpperCase() === "GET";
+  const cacheBustedPath = isGet
+    ? `${path}${path.includes("?") ? "&" : "?"}t=${Date.now()}`
+    : path;
+
+  const response = await fetch(`${API_BASE_URL}${cacheBustedPath}`, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as ApiResponse<T>;
+  if (!response.ok || payload.success === false) {
+    const message =
+      payload.message === "Transfer admin role before leaving this family"
+        ? "Bạn cần nhường quyền quản trị trước khi rời gia đình."
+        : payload.message || "Khong the ket noi toi may chu.";
+    throw new Error(message);
+  }
+
+  return payload.data;
+}
+
+function normalizeFamily(data: FamilyDto | null): Family | null {
+  if (!data) return null;
+  return {
+    family_id: String(data.family_id ?? data.id),
+    family_name: String(data.family_name ?? data.name ?? ""),
+    family_code: data.family_code ?? data.code,
+    created_at: data.created_at ?? data.createdAt,
+  };
+}
 
 export const familyApi = {
-  endpoint: endpoints.families,
-  async detail(family_id: string): Promise<{ family: Family; members: User[]; activities: FamilyActivity[] }> {
-    const state = await db();
-    const family = state.families.find((item) => item.family_id === family_id);
-    if (!family) throw new Error("Không tìm thấy gia đình.");
-    const memberIds = state.family_members.filter((item) => item.family_id === family_id).map((item) => item.user_id);
-    return {
-      family,
-      members: state.users.filter((item) => memberIds.includes(item.user_id)).map((item) => ({ ...item, password: undefined })),
-      activities: state.family_activities.filter((item) => item.family_id === family_id),
-    };
+  endpoint: "/api/family",
+  async me(): Promise<Family | null> {
+    return normalizeFamily(await request<FamilyDto | null>("/api/family/me"));
   },
-  async rename(family_id: string, family_name: string) {
-    const state = await db();
-    const family = state.families.find((item) => item.family_id === family_id);
-    if (!family) throw new Error("Không tìm thấy gia đình.");
-    family.family_name = family_name;
-    saveDb(state);
+  async members(): Promise<User[]> {
+    return request<User[]>("/api/family/members");
+  },
+  async detail(_family_id?: string): Promise<{ family: Family; members: User[]; activities: FamilyActivity[] }> {
+    const [family, members] = await Promise.all([this.me(), this.members()]);
+    if (!family) throw new Error("Ban chua tham gia gia dinh nao.");
+    return { family, members, activities: [] };
+  },
+  async rename(_family_id: string, family_name: string) {
+    const family = normalizeFamily(
+      await request<FamilyDto>("/api/family/me", {
+        method: "PATCH",
+        body: JSON.stringify({ name: family_name }),
+      })
+    );
+    if (!family) throw new Error("Khong tim thay gia dinh.");
     return family;
   },
-  async addMember(family_id: string, email: string) {
-    const state = await db();
-    const user = state.users.find((item) => item.email.toLowerCase() === email.toLowerCase());
-    if (!user) throw new Error("Email chưa đăng ký tài khoản.");
-    if (state.family_members.some((item) => item.family_id === family_id && item.user_id === user.user_id)) throw new Error("Thành viên đã có trong gia đình.");
-    state.family_members.push({ id: uid("family-member"), family_id, user_id: user.user_id });
-    saveDb(state);
-    return { ...user, password: undefined };
-  },
-  async addMemberById(family_id: string, user_id: string) {
-    const state = await db();
-    const user = state.users.find((item) => item.user_id === user_id);
-    if (!user) throw new Error("Không tìm thấy người dùng với ID này.");
-    if (state.family_members.some((item) => item.family_id === family_id && item.user_id === user.user_id)) throw new Error("Thành viên đã có trong gia đình.");
-    state.family_members.push({ id: uid("family-member"), family_id, user_id: user.user_id });
-    saveDb(state);
-    return { ...user, password: undefined };
-  },
-  async joinFamilyById(family_id: string, user_id: string) {
-    const state = await db();
-    const family = state.families.find((f) => f.family_id === family_id);
-    if (!family) throw new Error("Không tìm thấy gia đình với ID này.");
-    if (state.family_members.some((item) => item.family_id === family_id && item.user_id === user_id)) throw new Error("Bạn đã là thành viên của gia đình này.");
-    state.family_members.push({ id: uid("family-member"), family_id, user_id });
-    saveDb(state);
-    return family;
-  },
-  async createFamily(family_name: string, user_id: string) {
-    const state = await db();
-    const family_id = uid("family");
-    const family: Family = { family_id, family_name, created_by: user_id };
-    state.families.push(family);
-    state.family_members.push({ id: uid("family-member"), family_id, user_id });
-    saveDb(state);
-    return family;
-  },
-  async assignShoppingTask(family_id: string, shopping_list_id: string, user_id: string, actor_id: string) {
-    const state = await db();
-    const list = state.shopping_lists.find((item) => item.family_id === family_id && item.shopping_list_id === shopping_list_id);
-    if (!list) throw new Error("Không tìm thấy danh sách mua sắm.");
-    if (!state.family_members.some((member) => member.family_id === family_id && member.user_id === user_id)) throw new Error("Người dùng không thuộc gia đình.");
-    list.assigned_user_id = user_id;
-    state.family_activities.unshift({
-      id: uid("act"),
-      family_id,
-      user_id: actor_id,
-      action_type: "family",
-      message: "phân công nhiệm vụ mua hàng",
-      target: list.title,
-      status: "assigned",
-      created_at: new Date().toISOString(),
+  async addMember(_family_id: string, email: string) {
+    return request<SentFamilyInvitation>("/api/family/members", {
+      method: "POST",
+      body: JSON.stringify({ email }),
     });
-    saveDb(state);
   },
-  async respondShoppingTask(family_id: string, shopping_list_id: string, user_id: string, status: "accepted" | "rejected") {
-    const state = await db();
-    const list = state.shopping_lists.find((item) => item.family_id === family_id && item.shopping_list_id === shopping_list_id);
-    if (!list) throw new Error("Không tìm thấy danh sách mua sắm.");
-    state.family_activities.unshift({
-      id: uid("act"),
-      family_id,
-      user_id,
-      action_type: "family",
-      message: status === "accepted" ? "nhận nhiệm vụ mua hàng" : "từ chối nhiệm vụ mua hàng",
-      target: list.title,
-      status,
-      created_at: new Date().toISOString(),
+  async addMemberById(_family_id: string, user_id: string) {
+    const data = await request<{ member: User }>("/api/family/members", {
+      method: "POST",
+      body: JSON.stringify({ user_id }),
     });
-    saveDb(state);
+    return data.member;
+  },
+  async removeMember(_family_id: string, user_id: string) {
+    await request<null>(`/api/family/members/${encodeURIComponent(user_id)}`, { method: "DELETE" });
+  },
+  async joinFamilyById(family_code: string, _user_id?: string) {
+    const family = normalizeFamily(
+      await request<FamilyDto>("/api/family/join", {
+        method: "POST",
+        body: JSON.stringify({ code: family_code }),
+      })
+    );
+    if (!family) throw new Error("Khong the tham gia gia dinh.");
+    return family;
+  },
+  async createFamily(family_name: string, _user_id?: string) {
+    const family = normalizeFamily(
+      await request<FamilyDto>("/api/family", {
+        method: "POST",
+        body: JSON.stringify({ name: family_name }),
+      })
+    );
+    if (!family) throw new Error("Khong the tao gia dinh.");
+    return family;
+  },
+  async leaveFamily() {
+    await request<null>("/api/family/leave", { method: "DELETE" });
+  },
+  async sentInvitations() {
+    return request<SentFamilyInvitation[]>("/api/family/invitations/sent");
+  },
+  async receivedInvitations() {
+    return request<ReceivedFamilyInvitation[]>("/api/family/invitations/received");
+  },
+  async acceptInvitation(invitationId: number | string) {
+    const family = normalizeFamily(
+      await request<FamilyDto>(`/api/family/invitations/${encodeURIComponent(String(invitationId))}/accept`, {
+        method: "POST",
+      })
+    );
+    if (!family) throw new Error("Khong the chap nhan loi moi.");
+    return family;
+  },
+  async rejectInvitation(invitationId: number | string) {
+    await request<unknown>(`/api/family/invitations/${encodeURIComponent(String(invitationId))}/reject`, {
+      method: "POST",
+    });
+  },
+  async transferAdmin(targetUserId: string) {
+    await request<null>("/api/family/admin/transfer", {
+      method: "PATCH",
+      body: JSON.stringify({ targetUserId }),
+    });
+  },
+  async assignShoppingTask(_family_id: string, _shopping_list_id: string, _user_id: string, _actor_id: string) {
+    throw new Error("Chuc nang phan cong mua hang chua co API backend.");
+  },
+  async respondShoppingTask(_family_id: string, _shopping_list_id: string, _user_id: string, _status: "accepted" | "rejected") {
+    throw new Error("Chuc nang phan hoi nhiem vu mua hang chua co API backend.");
   },
 };

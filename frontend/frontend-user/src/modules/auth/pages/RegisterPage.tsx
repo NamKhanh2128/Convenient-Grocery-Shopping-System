@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
@@ -61,9 +61,7 @@ export function RegisterPage() {
         </form>
         <p className="mt-4 text-center text-sm text-[#746d82]">{t("hasAccount")} <Link className="font-bold text-[#7655aa]" to="/login">{t("loginLink")}</Link></p>
       </div>
-      <AppModal open={successOpen} onOpenChange={setSuccessOpen} type="success" title="Tạo tài khoản thành công" primaryLabel="Đăng nhập ngay" secondaryLabel={t("cancel")} onPrimary={() => navigate("/dashboard", { replace: true })}>
-        <div className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-[#31c875]" /> Gia đình 1 thành viên đã được tạo tự động.</div>
-      </AppModal>
+      <AppModal open={successOpen} onOpenChange={setSuccessOpen} type="success" title="Tạo tài khoản thành công" primaryLabel="Đăng nhập ngay" secondaryLabel={t("cancel")} onPrimary={() => navigate("/login", { replace: true })} />
     </div>
   );
 }

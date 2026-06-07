@@ -15,7 +15,7 @@ import { AppModal } from "@/shared/components/AppModal";
 
 export function DashboardPage() {
   const user = useAuthStore((state) => state.user)!;
-  const family = useAuthStore((state) => state.family)!;
+  const family = useAuthStore((state) => state.family);
   const [fridge, setFridge] = useState<FridgeRow[]>([]);
   const [shopping, setShopping] = useState<ShoppingListDetail[]>([]);
   const [meals, setMeals] = useState<MealPlanGroup[]>([]);
@@ -27,27 +27,30 @@ export function DashboardPage() {
   const t = useT();
 
   useEffect(() => {
-    const fid = family.family_id;
-    void Promise.allSettled([
-      fridgeApi.list(fid),
-      shoppingApi.list(fid),
-      mealApi.grouped(fid),
-      recipeApi.list(fid, undefined, { lite: true }),
-    ]).then(([fridgeRes, shopRes, mealsRes, recipesRes]) => {
-      if (fridgeRes.status === "fulfilled") setFridge(fridgeRes.value);
-      if (shopRes.status === "fulfilled") setShopping(shopRes.value);
-      if (mealsRes.status === "fulfilled") setMeals(mealsRes.value);
-      if (recipesRes.status === "fulfilled") setRecipes(recipesRes.value);
-    });
-    void recipeApi.suggestions(fid).then(setSuggestions).catch(() => setSuggestions([]));
-    void familyApi.detail(fid).then((data) => {
-      setActivities([...data.activities].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 4));
-      setMembers(data.members);
-    }).catch(() => {
-      setActivities([]);
-      setMembers([]);
-    });
-  }, [family.family_id]);
+    if (!family) return;
+    void Promise.all([
+      fridgeApi.list(family.family_id).then(setFridge),
+      shoppingApi.list(family.family_id).then(setShopping),
+      mealApi.grouped(family.family_id).then(setMeals),
+      recipeApi.list().then(setRecipes),
+      recipeApi.suggestions(family.family_id).then(setSuggestions),
+      familyApi.detail(family.family_id).then((data) => {
+        setActivities([...data.activities].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 4));
+        setMembers(data.members);
+      }),
+    ]);
+  }, [family]);
+
+  if (!family) {
+    return (
+      <div className="grid min-h-[calc(100vh-120px)] place-items-center rounded-[20px] bg-white p-8 text-center">
+        <div>
+          <h1 className="text-2xl font-extrabold text-[#5b368d]">Chưa có dữ liệu gia đình</h1>
+          <p className="mt-2 text-sm text-[#746d82]">Vui lòng đăng nhập lại để tải thông tin người dùng.</p>
+        </div>
+      </div>
+    );
+  }
 
   const suggestion = suggestions[0];
   const activeList = shopping.find((list) => list.status === "DRAFT") ?? shopping[0];
