@@ -118,51 +118,21 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
   addRecipeToSlot: async (date, slot, recipeId) => {
     const { familyId } = get();
     if (!familyId) return;
-    const state = await db();
-    const exists = state.meal_plans.some(
-      (p) => p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === recipeId,
-    );
-    if (!exists) {
-      state.meal_plans.push({
-        meal_plan_id: uid("meal"),
-        family_id: familyId,
-        meal_date: date,
-        meal_type: slot,
-        recipe_id: recipeId,
-      });
-      const session = getSession();
-      if (session) addActivity(state, familyId, session.user_id, "meal", "thêm món vào kế hoạch bữa ăn");
-      saveDb(state);
-    }
+    await mealApi.addRecipeToSlot(familyId, date, slot, Number(recipeId));
     await get().loadWeek(familyId);
   },
 
   removeRecipeFromSlot: async (date, slot, recipeId) => {
     const { familyId } = get();
     if (!familyId) return;
-    const state = await db();
-    state.meal_plans = state.meal_plans.filter(
-      (p) => !(p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === recipeId),
-    );
-    const session = getSession();
-    if (session) addActivity(state, familyId, session.user_id, "meal", "xóa món khỏi kế hoạch bữa ăn");
-    saveDb(state);
+    await mealApi.removeRecipeFromSlot(familyId, date, slot, Number(recipeId));
     await get().loadWeek(familyId);
   },
 
   replaceRecipeInSlot: async (date, slot, oldRecipeId, newRecipeId) => {
     const { familyId } = get();
     if (!familyId) return;
-    const state = await db();
-    state.meal_plans = state.meal_plans.filter(
-      (p) => !(p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === oldRecipeId),
-    );
-    if (!state.meal_plans.some((p) => p.family_id === familyId && p.meal_date === date && p.meal_type === slot && p.recipe_id === newRecipeId)) {
-      state.meal_plans.push({ meal_plan_id: uid("meal"), family_id: familyId, meal_date: date, meal_type: slot, recipe_id: newRecipeId });
-    }
-    const session = getSession();
-    if (session) addActivity(state, familyId, session.user_id, "meal", "thay thế món trong kế hoạch bữa ăn");
-    saveDb(state);
+    await mealApi.replaceRecipeInSlot(familyId, date, slot, Number(oldRecipeId), Number(newRecipeId));
     await get().loadWeek(familyId);
   },
 

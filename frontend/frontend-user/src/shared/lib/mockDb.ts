@@ -32,7 +32,7 @@ type Db = {
   family_activities: FamilyActivity[];
 };
 
-const DB_KEY = "nateat.db.v2";
+const DB_KEY = "nateat.db.v3";
 const SESSION_KEY = "nateat.session";
 
 const now = () => new Date().toISOString();
@@ -65,24 +65,24 @@ function initialDb(): Db {
     ],
     foods,
     recipes: [
-      { recipe_id: "recipe-bo-luc-lac", recipe_name: "Cơm bò lúc lắc", description: "Bò xào nhanh với cà chua, hành tây, tỏi và nước tương.", instructions: ["Ướp bò với tỏi và nước tương.", "Xào bò lửa lớn.", "Thêm cà chua, hành tây, nêm vừa ăn."], image_url: heroDish, time_minutes: 20, calories: 450, difficulty: "Dễ làm", is_favorite: true },
-      { recipe_id: "recipe-pho", recipe_name: "Phở bò tái", description: "Phở bò dùng nguyên liệu có trong tủ lạnh.", instructions: ["Nấu nước dùng.", "Trụng phở.", "Cho bò tái và chan nước dùng."], image_url: phoImg, time_minutes: 40, calories: 520, difficulty: "Trung bình" },
-      { recipe_id: "recipe-rice", recipe_name: "Cơm rang dưa bò", description: "Cơm rang nhanh cho bữa trưa gia đình.", instructions: ["Rang cơm.", "Xào bò.", "Trộn đều và nêm lại."], image_url: riceImg, time_minutes: 25, calories: 480, difficulty: "Dễ làm" },
-      { recipe_id: "recipe-soup", recipe_name: "Canh chua cá lóc", description: "Canh chua miền Nam từ cá lóc và cà chua.", instructions: ["Sơ chế cá.", "Nấu canh chua.", "Nêm vừa ăn."], image_url: soupImg, time_minutes: 30, calories: 320, difficulty: "Dễ làm" },
+      { recipe_id: "1", recipe_name: "Cơm bò lúc lắc", description: "Bò xào nhanh với cà chua, hành tây, tỏi và nước tương.", instructions: ["Ướp bò với tỏi và nước tương.", "Xào bò lửa lớn.", "Thêm cà chua, hành tây, nêm vừa ăn."], image_url: heroDish, time_minutes: 20, calories: 450, difficulty: "Dễ làm", is_favorite: true },
+      { recipe_id: "2", recipe_name: "Phở bò tái", description: "Phở bò dùng nguyên liệu có trong tủ lạnh.", instructions: ["Nấu nước dùng.", "Trụng phở.", "Cho bò tái và chan nước dùng."], image_url: phoImg, time_minutes: 40, calories: 520, difficulty: "Trung bình" },
+      { recipe_id: "3", recipe_name: "Cơm rang dưa bò", description: "Cơm rang nhanh cho bữa trưa gia đình.", instructions: ["Rang cơm.", "Xào bò.", "Trộn đều và nêm lại."], image_url: riceImg, time_minutes: 25, calories: 480, difficulty: "Dễ làm" },
+      { recipe_id: "4", recipe_name: "Canh chua cá lóc", description: "Canh chua miền Nam từ cá lóc và cà chua.", instructions: ["Sơ chế cá.", "Nấu canh chua.", "Nêm vừa ăn."], image_url: soupImg, time_minutes: 30, calories: 320, difficulty: "Dễ làm" },
     ],
     recipe_ingredients: [
-      { id: "ri-1", recipe_id: "recipe-bo-luc-lac", food_id: "food-beef", quantity: 300 },
-      { id: "ri-2", recipe_id: "recipe-bo-luc-lac", food_id: "food-tomato", quantity: 2 },
-      { id: "ri-3", recipe_id: "recipe-bo-luc-lac", food_id: "food-onion", quantity: 1 },
-      { id: "ri-4", recipe_id: "recipe-bo-luc-lac", food_id: "food-garlic", quantity: 1 },
-      { id: "ri-5", recipe_id: "recipe-bo-luc-lac", food_id: "food-chili", quantity: 1 },
-      { id: "ri-6", recipe_id: "recipe-bo-luc-lac", food_id: "food-soysauce", quantity: 50 },
-      { id: "ri-7", recipe_id: "recipe-pho", food_id: "food-noodle", quantity: 1 },
-      { id: "ri-8", recipe_id: "recipe-pho", food_id: "food-beef", quantity: 200 },
-      { id: "ri-9", recipe_id: "recipe-rice", food_id: "food-rice", quantity: 1 },
-      { id: "ri-10", recipe_id: "recipe-rice", food_id: "food-beef", quantity: 150 },
-      { id: "ri-11", recipe_id: "recipe-soup", food_id: "food-fish", quantity: 1 },
-      { id: "ri-12", recipe_id: "recipe-soup", food_id: "food-tomato", quantity: 2 },
+      { id: "ri-1", recipe_id: "1", food_id: "food-beef", quantity: 300 },
+      { id: "ri-2", recipe_id: "1", food_id: "food-tomato", quantity: 2 },
+      { id: "ri-3", recipe_id: "1", food_id: "food-onion", quantity: 1 },
+      { id: "ri-4", recipe_id: "1", food_id: "food-garlic", quantity: 1 },
+      { id: "ri-5", recipe_id: "1", food_id: "food-chili", quantity: 1 },
+      { id: "ri-6", recipe_id: "1", food_id: "food-soysauce", quantity: 50 },
+      { id: "ri-7", recipe_id: "2", food_id: "food-noodle", quantity: 1 },
+      { id: "ri-8", recipe_id: "2", food_id: "food-beef", quantity: 200 },
+      { id: "ri-9", recipe_id: "3", food_id: "food-rice", quantity: 1 },
+      { id: "ri-10", recipe_id: "3", food_id: "food-beef", quantity: 150 },
+      { id: "ri-11", recipe_id: "4", food_id: "food-fish", quantity: 1 },
+      { id: "ri-12", recipe_id: "4", food_id: "food-tomato", quantity: 2 },
     ],
     families: [{ family_id, family_name: "Gia đình NATEAT", created_by: user_id }],
     family_members: [
@@ -110,9 +110,9 @@ function initialDb(): Db {
       { id: "si-5", shopping_list_id: "shopping-1", food_id: "food-soysauce", quantity: 1, bought_status: false },
     ],
     meal_plans: [
-      { meal_plan_id: "meal-1", family_id, meal_date: todayIso(), meal_type: "Sáng", recipe_id: "recipe-pho" },
-      { meal_plan_id: "meal-2", family_id, meal_date: todayIso(), meal_type: "Trưa", recipe_id: "recipe-rice" },
-      { meal_plan_id: "meal-3", family_id, meal_date: todayIso(), meal_type: "Tối", recipe_id: "recipe-soup" },
+      { meal_plan_id: "meal-1", family_id, meal_date: todayIso(), meal_type: "Sáng", recipe_id: "2" },
+      { meal_plan_id: "meal-2", family_id, meal_date: todayIso(), meal_type: "Trưa", recipe_id: "3" },
+      { meal_plan_id: "meal-3", family_id, meal_date: todayIso(), meal_type: "Tối", recipe_id: "4" },
     ],
     family_activities: [
       { id: "act-1", family_id, user_id: "user-2", action_type: "shopping", message: 'thêm "Cà chua, Thịt bò" vào danh sách mua sắm', created_at: new Date(Date.now() - 5 * 60000).toISOString() },
