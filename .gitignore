@@ -152,6 +152,7 @@ dump.rdb
 # Misc
 .cursor/
 .claude/
+.codex-run/
 
 # Project specific - sensitive files
 .secrets/
