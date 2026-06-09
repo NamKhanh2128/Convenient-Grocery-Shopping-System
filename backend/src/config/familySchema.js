@@ -6,7 +6,7 @@ function identifier(value, fallback) {
   return next;
 }
 
-export const familySchema = {
+const familySchema = {
   family: {
     table: identifier(process.env.FAMILY_TABLE, 'family_groups'),
     id: identifier(process.env.FAMILY_ID_COLUMN, 'id'),
@@ -42,3 +42,5 @@ export const familySchema = {
     status: identifier(process.env.SHOPPING_LIST_STATUS_COLUMN, 'status'),
   },
 };
+
+module.exports = { familySchema };

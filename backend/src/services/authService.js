@@ -1,7 +1,7 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { authSchema } from '../config/authSchema.js';
-import { pool } from '../config/db.js';
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { authSchema } = require('../config/authSchema');
+const { pool } = require('../config/db');
 
 const MISSING_INFO_MESSAGE = 'Vui lòng nhập đầy đủ thông tin';
 const INVALID_TOKEN_MESSAGE = 'Token không hợp lệ hoặc đã hết hạn';
@@ -116,7 +116,7 @@ async function revokeRefreshToken(token) {
   return rows[0] || null;
 }
 
-export const authTokenService = {
+const authTokenService = {
   createAccessToken(user) {
     return jwt.sign(
       {
@@ -155,7 +155,7 @@ export const authTokenService = {
   },
 };
 
-export const authService = {
+const authService = {
   async register({ full_name, email, password }) {
     if (isBlank(full_name) || isBlank(email) || isBlank(password)) {
       return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
@@ -256,3 +256,5 @@ export const authService = {
     return { status: 200, body: { message: 'Đăng xuất thành công' } };
   },
 };
+
+module.exports = { authService, authTokenService };

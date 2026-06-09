@@ -1,20 +1,35 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { closePool, pool, testConnection } from './src/config/db.js';
-import authRoutes from './src/routes/authRoutes.js';
-import familyRoutes from './src/routes/familyRoutes.js';
+require('dotenv').config();
 
-dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) });
+const express = require('express');
+const cors = require('cors');
+const { closePool, pool, query, testConnection } = require('./src/config/db');
+const authRoutes = require('./src/routes/authRoutes');
+const familyRoutes = require('./src/routes/familyRoutes');
+const fridgeRoutes = require('./src/routes/fridgeRoutes');
+const recipeRoutes = require('./src/routes/recipeRoutes');
+const shoppingRoutes = require('./src/routes/shoppingRoutes');
+const foodRoutes = require('./src/routes/foodRoutes');
+const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
 app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/family', familyRoutes);
+app.use('/api/fridge', fridgeRoutes);
+app.use('/api/recipes', recipeRoutes);
+app.use('/api/shopping-lists', shoppingRoutes);
+app.use('/api/foods', foodRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
+
+// Backward-compatible route aliases used by existing frontend flows.
+app.use('/shopping-lists', shoppingRoutes);
+app.use('/foods', foodRoutes);
+app.use('/meal-plans', mealPlanRoutes);
 
 app.get('/health', async (_req, res) => {
   try {
@@ -35,6 +50,26 @@ app.get('/health', async (_req, res) => {
   }
 });
 
+app.get('/health/db', async (_req, res) => {
+  try {
+    const result = await query('SELECT NOW() AS server_time');
+
+    res.status(200).json({
+      success: true,
+      message: 'Ket noi database thanh cong',
+      data: {
+        serverTime: result.rows[0]?.server_time,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Khong ket noi duoc database',
+      error: error.message,
+    });
+  }
+});
+
 app.get('/api/users', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -45,6 +80,11 @@ app.get('/api/users', async (_req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Cannot load users', error: error.message });
   }
+});
+
+app.use((err, _req, res, _next) => {
+  console.error('[UnhandledError]', err);
+  res.status(500).json({ success: false, message: 'Loi server noi bo' });
 });
 
 const server = app.listen(PORT, async () => {

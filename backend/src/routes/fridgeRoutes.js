@@ -23,9 +23,12 @@ function authMiddleware(req, res, next) {
       return next();
     }
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    const payload = jwt.verify(
+      token,
+      process.env.JWT_SECRET_ACCESS || process.env.JWT_SECRET || 'dev-secret'
+    );
     req.user = {
-      id: payload.id || payload.userId || payload.sub,
+      id: payload.user_id || payload.id || payload.userId || payload.sub,
       familyGroupId: payload.familyGroupId || null,
       name: payload.name || payload.fullName || null,
     };
