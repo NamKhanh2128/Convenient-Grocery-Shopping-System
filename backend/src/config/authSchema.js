@@ -6,7 +6,7 @@ function identifier(value, fallback) {
   return next;
 }
 
-export const authSchema = {
+const authSchema = {
   user: {
     table: identifier(process.env.AUTH_USER_TABLE, 'users'),
     id: identifier(process.env.AUTH_USER_ID_COLUMN, 'id'),
@@ -16,3 +16,5 @@ export const authSchema = {
     role: identifier(process.env.AUTH_USER_ROLE_COLUMN, 'role'),
   },
 };
+
+module.exports = { authSchema };

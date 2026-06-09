@@ -69,7 +69,10 @@ function authRequired(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret-change-me');
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET_ACCESS || process.env.JWT_SECRET || 'dev-secret-change-me'
+    );
     enrichJwtUser(decoded)
       .then((user) => {
         req.user = user;

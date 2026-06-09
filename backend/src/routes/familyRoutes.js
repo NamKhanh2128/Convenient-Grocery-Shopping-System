@@ -1,7 +1,7 @@
-import express from 'express';
-import { FamilyController } from '../controllers/FamilyController.js';
-import { FamilyModel } from '../models/FamilyModel.js';
-import { authTokenService } from '../services/authService.js';
+const express = require('express');
+const { FamilyController } = require('../controllers/FamilyController');
+const { FamilyModel } = require('../models/FamilyModel');
+const { authTokenService } = require('../services/authService');
 
 const router = express.Router();
 
@@ -69,4 +69,4 @@ router.get('/invitations/received', FamilyController.listReceivedInvitations);
 router.post('/invitations/:id/accept', FamilyController.acceptInvitation);
 router.post('/invitations/:id/reject', FamilyController.rejectInvitation);
 
-export default router;
+module.exports = router;

@@ -1,10 +1,10 @@
-import { authService } from '../services/authService.js';
+const { authService } = require('../services/authService');
 
 function send(res, result) {
   return res.status(result.status).json(result.body);
 }
 
-export const authController = {
+const authController = {
   async register(req, res) {
     try {
       return send(res, await authService.register(req.body || {}));
@@ -45,3 +45,5 @@ export const authController = {
     }
   },
 };
+
+module.exports = { authController };

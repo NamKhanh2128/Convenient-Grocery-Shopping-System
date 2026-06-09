@@ -2,100 +2,96 @@ const MealPlanModel = require('../models/MealPlanModel');
 
 function getContext(req) {
   return {
-    familyGroupId:
-      req.query.familyGroupId || req.body?.familyGroupId || req.user?.gia_dinh_id || String(req.user?.family_id) || null,
+    userId: req.user?.user_id || req.user?.id,
+    familyGroupId: req.query.familyGroupId || req.body?.familyGroupId || String(req.user?.family_id || '') || null,
   };
 }
 
 class MealPlanController {
   static async list(req, res) {
     try {
-      const { familyGroupId } = getContext(req);
-      if (!familyGroupId) {
-        return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const { familyGroupId, userId } = getContext(req);
+      if (!userId) {
+        return res.status(400).json({ success: false, message: 'Missing userId' });
       }
+
       const items = await MealPlanModel.listByFamily(familyGroupId, {
         fromDate: req.query.from || null,
         toDate: req.query.to || null,
+        userId,
       });
+
       return res.status(200).json({
         success: true,
         data: {
           items: items.map((row) => ({
-            meal_plan_id: String(row.id),
-            family_id: String(familyGroupId),
-            meal_date: String(row.ngay_an).slice(0, 10),
-            meal_type: row.bua_an,
-            recipe_id: String(row.cong_thuc_id),
-            recipe_name: row.ten_mon_an,
+            meal_plan_id: String(row.meal_plan_id || row.id),
+            family_id: String(familyGroupId || ''),
+            meal_date: String(row.meal_date).slice(0, 10),
+            meal_type: row.meal_type,
+            recipe_id: String(row.recipe_id),
+            recipe_name: row.recipe_name,
           })),
         },
-        message: 'Lấy kế hoạch bữa ăn thành công',
+        message: 'Meal plan loaded successfully',
       });
     } catch (error) {
       console.error('[MealPlanController.list]', error);
-      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy kế hoạch bữa ăn' });
+      return res.status(500).json({ success: false, message: error.message || 'Cannot load meal plan' });
     }
   }
 
   static async add(req, res) {
     try {
-      const { familyGroupId } = getContext(req);
+      const { userId } = getContext(req);
       const { meal_date, meal_type, recipe_id } = req.body;
-      if (!familyGroupId || !meal_date || !meal_type || !recipe_id) {
-        return res.status(400).json({ success: false, message: 'Thiếu thông tin bữa ăn' });
+      if (!userId || !meal_date || !meal_type || !recipe_id) {
+        return res.status(400).json({ success: false, message: 'Missing meal plan fields' });
       }
-      await MealPlanModel.addEntry({
-        familyGroupId,
-        mealDate: meal_date,
-        mealType: meal_type,
-        recipeId: recipe_id,
-      });
-      return res.status(201).json({ success: true, data: null, message: 'Đã thêm món vào kế hoạch' });
+
+      await MealPlanModel.addEntry({ userId, mealDate: meal_date, mealType: meal_type, recipeId: recipe_id });
+      return res.status(201).json({ success: true, data: null, message: 'Recipe added to meal plan' });
     } catch (error) {
       console.error('[MealPlanController.add]', error);
-      return res.status(400).json({ success: false, message: error.message || 'Không thể thêm món' });
+      return res.status(400).json({ success: false, message: error.message || 'Cannot add meal plan item' });
     }
   }
 
   static async remove(req, res) {
     try {
-      const { familyGroupId } = getContext(req);
+      const { userId } = getContext(req);
       const { meal_date, meal_type, recipe_id } = req.body;
-      if (!familyGroupId || !meal_date || !meal_type || !recipe_id) {
-        return res.status(400).json({ success: false, message: 'Thiếu thông tin bữa ăn' });
+      if (!userId || !meal_date || !meal_type || !recipe_id) {
+        return res.status(400).json({ success: false, message: 'Missing meal plan fields' });
       }
-      await MealPlanModel.removeEntry({
-        familyGroupId,
-        mealDate: meal_date,
-        mealType: meal_type,
-        recipeId: recipe_id,
-      });
-      return res.status(200).json({ success: true, data: null, message: 'Đã xóa món khỏi kế hoạch' });
+
+      await MealPlanModel.removeEntry({ userId, mealDate: meal_date, mealType: meal_type, recipeId: recipe_id });
+      return res.status(200).json({ success: true, data: null, message: 'Recipe removed from meal plan' });
     } catch (error) {
       console.error('[MealPlanController.remove]', error);
-      return res.status(400).json({ success: false, message: error.message || 'Không thể xóa món' });
+      return res.status(400).json({ success: false, message: error.message || 'Cannot remove meal plan item' });
     }
   }
 
   static async replace(req, res) {
     try {
-      const { familyGroupId } = getContext(req);
+      const { userId } = getContext(req);
       const { meal_date, meal_type, old_recipe_id, new_recipe_id } = req.body;
-      if (!familyGroupId || !meal_date || !meal_type || !old_recipe_id || !new_recipe_id) {
-        return res.status(400).json({ success: false, message: 'Thiếu thông tin thay thế' });
+      if (!userId || !meal_date || !meal_type || !old_recipe_id || !new_recipe_id) {
+        return res.status(400).json({ success: false, message: 'Missing replacement fields' });
       }
+
       await MealPlanModel.replaceEntry({
-        familyGroupId,
+        userId,
         mealDate: meal_date,
         mealType: meal_type,
         oldRecipeId: old_recipe_id,
         newRecipeId: new_recipe_id,
       });
-      return res.status(200).json({ success: true, data: null, message: 'Đã thay thế món' });
+      return res.status(200).json({ success: true, data: null, message: 'Meal plan item replaced' });
     } catch (error) {
       console.error('[MealPlanController.replace]', error);
-      return res.status(400).json({ success: false, message: error.message || 'Không thể thay thế món' });
+      return res.status(400).json({ success: false, message: error.message || 'Cannot replace meal plan item' });
     }
   }
 }

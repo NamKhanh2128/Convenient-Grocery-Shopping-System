@@ -1,5 +1,5 @@
-import { FamilyModel } from '../models/FamilyModel.js';
-import { authTokenService } from '../services/authService.js';
+const { FamilyModel } = require('../models/FamilyModel');
+const { authTokenService } = require('../services/authService');
 
 const INVALID_TOKEN_MESSAGE = 'Token khong hop le hoac da het han';
 
@@ -11,7 +11,7 @@ async function resolveRequestUser({ userId, email, fullName }) {
   return FamilyModel.resolveUserIdentity({ id: userId, email, fullName });
 }
 
-export async function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization || '';
   const [scheme, token] = authHeader.split(' ');
 
@@ -50,3 +50,5 @@ export async function authMiddleware(req, res, next) {
     return res.status(401).json({ message: INVALID_TOKEN_MESSAGE });
   }
 }
+
+module.exports = { authMiddleware };

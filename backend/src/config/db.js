@@ -1,18 +1,19 @@
-import dotenv from 'dotenv';
-import pg from 'pg';
-import { fileURLToPath } from 'url';
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
 
-dotenv.config({ path: fileURLToPath(new URL('../../.env', import.meta.url)) });
+dotenv.config();
 
-const { Pool } = pg;
-
-export const pool = new Pool({
+const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.DB_POOL_MAX || 10),
   ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
 });
 
-export async function testConnection() {
+async function query(text, params) {
+  return pool.query(text, params);
+}
+
+async function testConnection() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is not configured');
   }
@@ -31,6 +32,13 @@ export async function testConnection() {
   }
 }
 
-export async function closePool() {
+async function closePool() {
   await pool.end();
 }
+
+module.exports = {
+  closePool,
+  pool,
+  query,
+  testConnection,
+};

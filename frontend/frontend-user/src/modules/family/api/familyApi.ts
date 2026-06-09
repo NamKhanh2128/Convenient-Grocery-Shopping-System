@@ -1,6 +1,10 @@
 import type { Family, FamilyActivity, User } from "@/types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+function normalizeApiOrigin(value?: string) {
+  return (value || "http://localhost:3000").replace(/\/api\/?$/, "");
+}
+
+const API_BASE_URL = normalizeApiOrigin(import.meta.env.VITE_API_BASE_URL);
 const ACCESS_TOKEN_KEY = "nateat.token";
 
 type ApiResponse<T> = {

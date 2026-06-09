@@ -1,4 +1,4 @@
-import { FamilyModel } from '../models/FamilyModel.js';
+const { FamilyModel } = require('../models/FamilyModel');
 
 function ok(res, data, message = 'OK') {
   return res.json({ success: true, data, message });
@@ -75,7 +75,7 @@ async function getCurrentFamily(userId) {
   return { user, family };
 }
 
-export const FamilyController = {
+const FamilyController = {
   async getMe(req, res) {
     try {
       const userId = getRequestUserId(req);
@@ -326,3 +326,5 @@ export const FamilyController = {
     }
   },
 };
+
+module.exports = { FamilyController };

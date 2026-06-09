@@ -1,5 +1,5 @@
-import { pool } from '../config/db.js';
-import { familySchema as schema } from '../config/familySchema.js';
+const { pool } = require('../config/db');
+const { familySchema: schema } = require('../config/familySchema');
 
 const f = schema.family;
 const u = schema.user;
@@ -116,7 +116,7 @@ async function ensureSchema() {
   return schemaReadyPromise;
 }
 
-export const FamilyModel = {
+const FamilyModel = {
   async ensureSchema() {
     await ensureSchema();
   },
@@ -609,3 +609,5 @@ export const FamilyModel = {
     return { rowCount: result.rowCount, member: result.rows[0] || null };
   },
 };
+
+module.exports = { FamilyModel };

@@ -1,5 +1,4 @@
 const { query } = require('../config/db');
-const FridgeItemModel = require('../models/FridgeItemModel');
 const ShoppingModel = require('../models/ShoppingModel');
 
 const groupIdCache = new Map();
@@ -26,82 +25,73 @@ async function resolveShoppingUserId(userId) {
   return any.rows[0]?.id ?? 1;
 }
 
+async function ensureGroupMember(groupId, userId) {
+  const existing = await query('SELECT id FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1', [groupId, userId]);
+  if (existing.rows[0]) return;
+  await query('INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)', [groupId, userId]);
+}
+
 async function resolveShoppingGroupId(familyGroupId) {
   const cacheKey = String(familyGroupId ?? '');
   if (groupIdCache.has(cacheKey)) return groupIdCache.get(cacheKey);
 
-  const giaDinhId = await FridgeItemModel.resolveGiaDinhId(familyGroupId);
-
-  const byId = await query('SELECT id FROM family_groups WHERE id = $1 LIMIT 1', [giaDinhId]);
-  if (byId.rows[0]) {
-    groupIdCache.set(cacheKey, byId.rows[0].id);
-    return byId.rows[0].id;
-  }
-
-  const giaDinh = await query('SELECT ten_gia_dinh FROM gia_dinh WHERE gia_dinh_id = $1 LIMIT 1', [giaDinhId]);
-  const familyName = giaDinh.rows[0]?.ten_gia_dinh || 'Gia đình NATEAT';
-
-  const byName = await query('SELECT id FROM family_groups WHERE name = $1 LIMIT 1', [familyName]);
-  if (byName.rows[0]) {
-    await ensureGroupMember(byName.rows[0].id, await resolveShoppingUserId(null));
-    groupIdCache.set(cacheKey, byName.rows[0].id);
-    return byName.rows[0].id;
+  if (/^\d+$/.test(cacheKey)) {
+    const byId = await query('SELECT id FROM family_groups WHERE id = $1 LIMIT 1', [Number(cacheKey)]);
+    if (byId.rows[0]) {
+      groupIdCache.set(cacheKey, byId.rows[0].id);
+      return byId.rows[0].id;
+    }
   }
 
   const userId = await resolveShoppingUserId(null);
-  const created = await query(
-    'INSERT INTO family_groups (name, created_by) VALUES ($1, $2) RETURNING id',
-    [familyName, userId],
-  );
+  const existing = await query('SELECT id FROM family_groups ORDER BY id LIMIT 1');
+  if (existing.rows[0]) {
+    await ensureGroupMember(existing.rows[0].id, userId);
+    groupIdCache.set(cacheKey, existing.rows[0].id);
+    return existing.rows[0].id;
+  }
+
+  const created = await query('INSERT INTO family_groups (name, created_by) VALUES ($1, $2) RETURNING id', ['Gia đình NATEAT', userId]);
   const groupId = created.rows[0].id;
   await ensureGroupMember(groupId, userId);
   groupIdCache.set(cacheKey, groupId);
   return groupId;
 }
 
-async function ensureGroupMember(groupId, userId) {
-  const existing = await query(
-    'SELECT id FROM group_members WHERE group_id = $1 AND user_id = $2 LIMIT 1',
-    [groupId, userId],
-  );
-  if (existing.rows[0]) return;
-  await query('INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)', [groupId, userId]);
-}
-
 async function getDefaultUnitId(unitSymbol) {
   const symbol = UNIT_SYMBOLS[unitSymbol] || unitSymbol || 'g';
   if (defaultUnitIdCache.has(symbol)) return defaultUnitIdCache.get(symbol);
-  const bySymbol = await query('SELECT id FROM units WHERE symbol = $1 OR name = $1 LIMIT 1', [symbol]);
+  const bySymbol = await query('SELECT id FROM units WHERE lower(symbol) = lower($1) OR lower(name) = lower($1) LIMIT 1', [symbol]);
   if (bySymbol.rows[0]) {
     defaultUnitIdCache.set(symbol, bySymbol.rows[0].id);
     return bySymbol.rows[0].id;
   }
-  const any = await query('SELECT id FROM units ORDER BY id LIMIT 1');
-  const id = any.rows[0]?.id ?? 1;
-  defaultUnitIdCache.set(symbol, id);
-  return id;
+  const created = await query('INSERT INTO units (name, symbol) VALUES ($1, $1) RETURNING id', [symbol]);
+  defaultUnitIdCache.set(symbol, created.rows[0].id);
+  return created.rows[0].id;
 }
 
 async function getDefaultCategoryId() {
   if (defaultCategoryIdCache != null) return defaultCategoryIdCache;
   const any = await query('SELECT id FROM food_categories ORDER BY id LIMIT 1');
-  defaultCategoryIdCache = any.rows[0]?.id ?? 1;
+  if (any.rows[0]) {
+    defaultCategoryIdCache = any.rows[0].id;
+    return defaultCategoryIdCache;
+  }
+  const created = await query("INSERT INTO food_categories (name_vi, name_en) VALUES ('Khác', 'Other') RETURNING id");
+  defaultCategoryIdCache = created.rows[0].id;
   return defaultCategoryIdCache;
 }
 
 async function resolveOrCreateFood({ thuc_pham_id, food_name, unit }) {
-  let name = String(food_name || '').trim();
-  if (thuc_pham_id && /^\d+$/.test(String(thuc_pham_id))) {
-    const foodById = await query('SELECT id, food_name FROM foods WHERE id = $1 LIMIT 1', [Number(thuc_pham_id)]);
+  const numericId = /^\d+$/.test(String(thuc_pham_id ?? '')) ? Number(thuc_pham_id) : null;
+  if (numericId) {
+    const foodById = await query('SELECT id FROM foods WHERE id = $1 LIMIT 1', [numericId]);
     if (foodById.rows[0]) return foodById.rows[0].id;
-
-    const thucPham = await query('SELECT ten_thuc_pham FROM thuc_pham WHERE thuc_pham_id = $1 LIMIT 1', [
-      Number(thuc_pham_id),
-    ]);
-    if (thucPham.rows[0]?.ten_thuc_pham) name = thucPham.rows[0].ten_thuc_pham;
   }
-  if (!name) throw new Error('Thiếu tên thực phẩm để thêm vào danh sách mua.');
 
+  const name = String(food_name || '').trim();
+  if (!name) throw new Error('Missing food name for shopping list item.');
   const existing = await ShoppingModel.findFoodByName(name);
   if (existing) return existing.id;
 
