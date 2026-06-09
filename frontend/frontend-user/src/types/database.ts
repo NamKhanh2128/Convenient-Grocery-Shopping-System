@@ -1,4 +1,4 @@
-export type UserRole = "ADMIN" | "USER";
+export type UserRole = "ADMIN" | "USER" | "admin" | "member";
 export type ShoppingStatus = "DRAFT" | "DONE";
 export type ShoppingItemStatus = "PENDING" | "PARTIAL" | "COMPLETED";
 export type MealType = "Sáng" | "Trưa" | "Tối" | "Bữa phụ";
@@ -48,7 +48,9 @@ export interface RecipeIngredient {
 export interface Family {
   family_id: string;
   family_name: string;
-  created_by: string;
+  family_code?: string;
+  created_at?: string;
+  created_by?: string;
 }
 
 export interface FamilyMember {
@@ -118,8 +120,9 @@ export interface FamilyActivity {
 
 export interface AuthSession {
   token: string;
+  refreshToken?: string;
   user: User;
-  family: Family;
+  family: Family | null;
 }
 
 export interface RecipeSuggestion {

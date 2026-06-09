@@ -91,7 +91,7 @@ export function LoginPage() {
           </Button>
         </div>
       </section>
-      <AppModal open={lockedOpen} onOpenChange={setLockedOpen} type="error" title="Tài khoản bị khóa" primaryLabel="Liên hệ hỗ trợ" secondaryLabel={t("close")} onPrimary={() => toast.info("Đã mở yêu cầu hỗ trợ tài khoản.")}>
+      <AppModal open={lockedOpen} onOpenChange={setLockedOpen} type="error" title="Tài khoản bị khóa" primaryLabel="Liên hệ hỗ trợ" secondaryLabel={t("close")} onPrimary={() => { toast.info("Đã mở yêu cầu hỗ trợ tài khoản."); }}>
         Bạn đã nhập sai quá 5 lần.
       </AppModal>
     </div>

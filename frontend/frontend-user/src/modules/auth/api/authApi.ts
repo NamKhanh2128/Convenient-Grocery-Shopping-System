@@ -1,71 +1,100 @@
+import { familyApi } from "@/modules/family/api/familyApi";
 import { endpoints } from "@/shared/constants/endpoints";
-import type { AuthSession, Family, User } from "@/types";
-import { db, getSession, saveDb, setSession } from "@/shared/lib/mockDb";
-import { uid } from "@/shared/utils/storage";
+import type { AuthSession, User } from "@/types";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const ACCESS_TOKEN_KEY = "nateat.token";
+const REFRESH_TOKEN_KEY = "nateat.refreshToken";
+
+type AuthResponse = {
+  message?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: User;
+};
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || "Khong the ket noi toi may chu.");
+  }
+
+  return data as T;
+}
+
+function saveSession(accessToken: string, refreshToken?: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+function clearSession() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
 
 export const authApi = {
   endpoint: endpoints.auth,
   async login(payload: { email: string; password: string; remember?: boolean }): Promise<AuthSession> {
-    const state = await db();
-    if (!payload.email || !payload.password) throw new Error("Vui lòng nhập đầy đủ email và mật khẩu.");
-    const user = state.users.find((item) => item.email.toLowerCase() === payload.email.toLowerCase());
-    if (!user) throw new Error("Email hoặc mật khẩu không đúng.");
-    const expectedPassword = user.password ?? (user.role === "ADMIN" ? "Admin@123" : "User@123");
-    if (expectedPassword !== payload.password) throw new Error("Email hoặc mật khẩu không đúng.");
-    if (user.locked) throw new Error("Tài khoản đã bị khóa.");
-    const family = state.families.find((item) => item.created_by === user.user_id) ?? state.families.find((family) => state.family_members.some((member) => member.family_id === family.family_id && member.user_id === user.user_id));
-    if (!family) throw new Error("Không tìm thấy gia đình của người dùng.");
-    const token = `mock-token-${user.user_id}`;
-    setSession({ token, user_id: user.user_id });
+    const data = await request<AuthResponse>(endpoints.auth.login, {
+      method: "POST",
+      body: JSON.stringify({ email: payload.email, password: payload.password }),
+    });
+
+    if (!data.accessToken || !data.user) throw new Error("Dang nhap that bai.");
+    saveSession(data.accessToken, data.refreshToken);
     if (payload.remember) localStorage.setItem("nateat.remembered_email", payload.email);
     else localStorage.removeItem("nateat.remembered_email");
-    return { token, user: { ...user, password: undefined }, family };
+
+    const family = await familyApi.me().catch(() => null);
+    return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, family };
   },
   async register(payload: { full_name: string; email: string; password: string; phone?: string }): Promise<AuthSession> {
-    const state = await db();
-    if (state.users.some((item) => item.email.toLowerCase() === payload.email.toLowerCase())) {
-      throw new Error("Email đã tồn tại.");
-    }
-    const user_id = uid("user");
-    const family_id = uid("family");
-    const user: User = { user_id, full_name: payload.full_name, email: payload.email, phone: payload.phone, password: payload.password, role: "USER" };
-    const family: Family = { family_id, family_name: `Gia đình của ${payload.full_name}`, created_by: user_id };
-    state.users.push(user);
-    state.families.push(family);
-    state.family_members.push({ id: uid("family-member"), family_id, user_id });
-    saveDb(state);
-    const token = `mock-token-${user_id}`;
-    setSession({ token, user_id });
-    return { token, user: { ...user, password: undefined }, family };
+    const data = await request<AuthResponse>(endpoints.auth.register, {
+      method: "POST",
+      body: JSON.stringify({
+        full_name: payload.full_name,
+        email: payload.email,
+        password: payload.password,
+      }),
+    });
+
+    if (!data.user) throw new Error("Dang ky that bai.");
+    return { token: "", user: data.user, family: null };
   },
   async current(): Promise<AuthSession | null> {
-    const session = getSession();
-    if (!session) return null;
-    const state = await db();
-    const user = state.users.find((item) => item.user_id === session.user_id);
-    if (!user) return null;
-    const family = state.families.find((item) => item.created_by === user.user_id) ?? state.families.find((family) => state.family_members.some((member) => member.family_id === family.family_id && member.user_id === user.user_id));
-    if (!family) return null;
-    return { token: session.token, user: { ...user, password: undefined }, family };
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) return null;
+
+    const data = await request<{ user: User }>(endpoints.auth.profile, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const family = await familyApi.me().catch(() => null);
+    return { token, refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) ?? undefined, user: data.user, family };
   },
   async logout() {
-    setSession(null);
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (refreshToken) {
+      await request(endpoints.auth.logout, {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => undefined);
+    }
+    clearSession();
   },
-  async updateProfile(user_id: string, payload: Pick<User, "full_name" | "email">): Promise<User> {
-    const state = await db();
-    const index = state.users.findIndex((item) => item.user_id === user_id);
-    if (index < 0) throw new Error("Không tìm thấy người dùng.");
-    if (state.users.some((item) => item.user_id !== user_id && item.email.toLowerCase() === payload.email.toLowerCase())) throw new Error("Email đã tồn tại.");
-    state.users[index] = { ...state.users[index], ...payload };
-    saveDb(state);
-    return { ...state.users[index], password: undefined };
+  async updateProfile(_user_id: string, _payload: Pick<User, "full_name" | "email">): Promise<User> {
+    throw new Error("Chuc nang cap nhat ho so chua duoc ket noi backend.");
   },
-  async changePassword(user_id: string, payload: { old_password: string; new_password: string }) {
-    const state = await db();
-    const user = state.users.find((item) => item.user_id === user_id);
-    if (!user) throw new Error("Không tìm thấy người dùng.");
-    if (user.password !== payload.old_password) throw new Error("Mật khẩu hiện tại không đúng.");
-    user.password = payload.new_password;
-    saveDb(state);
+  async changePassword(_user_id: string, _payload: { old_password: string; new_password: string }) {
+    throw new Error("Chuc nang doi mat khau chua duoc ket noi backend.");
   },
 };

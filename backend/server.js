@@ -1,99 +1,67 @@
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { closePool, pool, testConnection } from './src/config/db.js';
+import authRoutes from './src/routes/authRoutes.js';
+import familyRoutes from './src/routes/familyRoutes.js';
 
-const express = require('express');
-const cors = require('cors');
-const AuthController = require('./src/controllers/AuthController');
-const fridgeRoutes = require('./src/routes/fridgeRoutes');
-const recipeRoutes = require('./src/routes/recipeRoutes');
-const shoppingRoutes = require('./src/routes/shoppingRoutes');
-const foodRoutes = require('./src/routes/foodRoutes');
-const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
+dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/auth', authRoutes);
+app.use('/api/family', familyRoutes);
 
-app.get('/health', (_req, res) => {
-  res.status(200).json({ success: true, message: 'OK' });
-});
-
-app.get('/health/db', async (_req, res) => {
+app.get('/health', async (_req, res) => {
   try {
-    const { query } = require('./src/config/db');
-    const result = await query('SELECT NOW() AS server_time');
+    const db = await testConnection();
 
-    let chiTietTuLanhCount = null;
-    let fridgeTable = 'chi_tiet_tu_lanh';
-    let fridgeTableError = null;
-
-    try {
-      const fridgeCheck = await query(
-        'SELECT COUNT(*)::int AS count FROM chi_tiet_tu_lanh',
-      );
-      chiTietTuLanhCount = fridgeCheck.rows[0]?.count ?? 0;
-    } catch (tableError) {
-      fridgeTableError = tableError.message;
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Kết nối Supabase PostgreSQL thành công',
-      data: {
-        serverTime: result.rows[0]?.server_time,
-        fridgeTable,
-        chiTietTuLanhCount,
-        fridgeTableOk: fridgeTableError === null,
-        ...(fridgeTableError ? { fridgeTableError } : {}),
-      },
+    res.json({
+      status: 'ok',
+      database: db,
     });
   } catch (error) {
-    console.error('[health/db]', error);
     res.status(500).json({
-      success: false,
-      message: 'Không kết nối được database',
-      error: error.message,
+      status: 'error',
+      database: {
+        connected: false,
+        message: error.message,
+      },
     });
   }
 });
 
-app.use('/api/fridge', fridgeRoutes);
-app.use('/api/recipes', recipeRoutes);
-app.use('/api/shopping-lists', shoppingRoutes);
-app.use('/api/foods', foodRoutes);
-app.use('/api/meal-plans', mealPlanRoutes);
-app.use('/auth', AuthController.router);
-app.use('/shopping-lists', shoppingRoutes);
-app.use('/foods', foodRoutes);
-app.use('/meal-plans', mealPlanRoutes);
+app.get('/api/users', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, email, full_name, phone, role, is_locked, created_at, updated_at FROM users LIMIT 50'
+    );
 
-app.use((err, _req, res, _next) => {
-  console.error('[UnhandledError]', err);
-  res.status(500).json({ success: false, message: 'Lỗi server nội bộ' });
-});
-
-const RecipeModel = require('./src/models/RecipeModel');
-const MealPlanModel = require('./src/models/MealPlanModel');
-
-Promise.all([
-  RecipeModel.ensureRecipeTables(),
-  MealPlanModel.ensureTable(),
-])
-  .then(() => console.log('[startup] Schema warmup ready'))
-  .catch((err) => console.warn('[startup] Schema warmup:', err.message));
-
-const server = app.listen(PORT, () => {
-  console.log(`NATEAT API listening on http://localhost:${PORT}`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\nCổng ${PORT} đang được dùng — backend có thể ĐÃ CHẠY SẴN.`);
-    console.error(`  Kiểm tra: http://localhost:${PORT}/health`);
-    console.error(`  Khởi động lại: npm run restart`);
-    console.error(`  Chỉ tắt backend:  npm run stop\n`);
-    process.exit(1);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'Cannot load users', error: error.message });
   }
-  throw err;
 });
+
+const server = app.listen(PORT, async () => {
+  console.log(`API server is running on port ${PORT}`);
+
+  try {
+    const db = await testConnection();
+    console.log(`Database connected: ${db.database} on ${db.host}`);
+  } catch (error) {
+    console.error(`Database connection failed: ${error.message}`);
+  }
+});
+
+async function shutdown() {
+  await closePool();
+  server.close(() => process.exit(0));
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
