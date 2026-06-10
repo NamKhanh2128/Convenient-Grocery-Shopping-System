@@ -1,4 +1,4 @@
-﻿import { ClipboardCheck, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { ClipboardCheck, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -106,7 +106,7 @@ export function ShoppingPage() {
           </div>
         )}
       </div>
-      <AppModal open={Boolean(completeId)} onOpenChange={(open) => !open && setCompleteId(null)} type="confirm" title="Hoàn tất mua sắm?" primaryLabel="Hoàn tất" secondaryLabel="Tiếp tục" onPrimary={() => completeId && completeList(completeId)}>
+      <AppModal open={Boolean(completeId)} onOpenChange={(open) => !open && setCompleteId(null)} type="confirm" title="Hoàn tất mua sắm?" primaryLabel="Hoàn tất" secondaryLabel="Tiếp tục" onPrimary={async () => { if (completeId) await completeList(completeId); }}>
         Danh sách chỉ chuyển DONE nếu tất cả mặt hàng đã COMPLETED.
       </AppModal>
     </>

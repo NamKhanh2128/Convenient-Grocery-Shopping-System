@@ -11,6 +11,15 @@ const shoppingRoutes = require('./src/routes/shoppingRoutes');
 const foodRoutes = require('./src/routes/foodRoutes');
 const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
 
+// ─── Admin routes ────────────────────────────────────────────────────────────
+const adminUserRoutes     = require('./src/routes/adminUserRoutes');
+const adminFoodRoutes     = require('./src/routes/adminFoodRoutes');
+const adminRecipeRoutes   = require('./src/routes/adminRecipeRoutes');
+const adminFamilyRoutes   = require('./src/routes/adminFamilyRoutes');
+const adminStatsRoutes    = require('./src/routes/adminStatsRoutes');
+const adminActivityRoutes = require('./src/routes/adminActivityRoutes');
+const adminSettingsRoutes = require('./src/routes/adminSettingsRoutes');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -25,6 +34,15 @@ app.use('/api/recipes', recipeRoutes);
 app.use('/api/shopping-lists', shoppingRoutes);
 app.use('/api/foods', foodRoutes);
 app.use('/api/meal-plans', mealPlanRoutes);
+
+// ─── Admin API namespace ─────────────────────────────────────────────────────
+app.use('/api/admin/users',      adminUserRoutes);
+app.use('/api/admin/foods',      adminFoodRoutes);
+app.use('/api/admin/recipes',    adminRecipeRoutes);
+app.use('/api/admin/families',   adminFamilyRoutes);
+app.use('/api/admin/stats',      adminStatsRoutes);
+app.use('/api/admin/activities', adminActivityRoutes);
+app.use('/api/admin/settings',   adminSettingsRoutes);
 
 // Backward-compatible route aliases used by existing frontend flows.
 app.use('/shopping-lists', shoppingRoutes);

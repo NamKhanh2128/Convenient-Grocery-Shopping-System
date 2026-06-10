@@ -122,7 +122,7 @@ export function StatisticsPage() {
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
-                        <Pie data={overview.categoryDistribution} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={80} label={({ category }) => category}>
+                        <Pie data={overview.categoryDistribution} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={80} label={({ name }) => name}>
                           {overview.categoryDistribution.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
@@ -244,7 +244,7 @@ export function StatisticsPage() {
                           cx="50%"
                           cy="50%"
                           outerRadius={80}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
                         >
                           <Cell fill="#66c2a5" />
                           <Cell fill="#fc8d62" />

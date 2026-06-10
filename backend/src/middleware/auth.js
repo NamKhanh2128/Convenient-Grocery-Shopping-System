@@ -20,6 +20,7 @@ async function resolveMockUser(token) {
     gia_dinh_id,
     email: 'dev@nateat.vn',
     full_name: 'Dev User',
+    role: 'ADMIN',
   };
   mockUserCache.set(token, user);
   return user;

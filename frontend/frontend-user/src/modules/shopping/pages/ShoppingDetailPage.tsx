@@ -360,6 +360,7 @@ function GroupedItemModal({
   onClose: () => void;
   onSelectItem: (itemId: string, qty: number) => void;
 }) {
+  const t = useT();
   // Try to get expiry from fridge for matching food name
   const fridgeMatches = fridgeItems.filter(
     (f) => f.food.food_name.toLowerCase() === group.food_name.toLowerCase(),

@@ -164,10 +164,11 @@ export function RecipeListPage() {
       <AppModal
         open={Boolean(deleteId)}
         onOpenChange={(open) => !open && setDeleteId(null)}
+        type="confirm"
         title="Xóa công thức?"
-        description="Hành động này không thể hoàn tác."
-        confirmLabel="Xóa"
-        onConfirm={async () => {
+        primaryLabel="Xóa"
+        secondaryLabel="Hủy"
+        onPrimary={async () => {
           if (!deleteId) return;
           try {
             await remove(deleteId, family.family_id);
@@ -178,7 +179,9 @@ export function RecipeListPage() {
             setDeleteId(null);
           }
         }}
-      />
+      >
+        Hành động này không thể hoàn tác.
+      </AppModal>
     </>
   );
 }

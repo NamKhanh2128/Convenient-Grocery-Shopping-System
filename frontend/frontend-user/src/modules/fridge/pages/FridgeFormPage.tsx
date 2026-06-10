@@ -1,4 +1,4 @@
-﻿import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -32,7 +32,8 @@ export function FridgeFormPage({ mode }: { mode: "add" | "edit" }) {
     confidence: "high" | "medium" | "low";
   } | null>(null);
   const current = useMemo(() => items.find((item) => item.fridge_item_id === id), [items, id]);
-  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema), defaultValues: { food_id: "", quantity: 1, expiry_date: new Date().toISOString().slice(0, 10), location: "Ngăn mát" } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema) as any, defaultValues: { food_id: "", quantity: 1, expiry_date: new Date().toISOString().slice(0, 10), location: "Ngăn mát" } });
   const selectedFoodId = watch("food_id");
 
   useEffect(() => { void foodApi.list().then(setFoods); void load(family.family_id); }, [family.family_id, load]);

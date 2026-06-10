@@ -1,4 +1,21 @@
 {
+  "name": "convenient-grocery-shopping-system",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend/frontend-user",
+    "frontend/frontend-admin"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:user": "npm run dev -w frontend/frontend-user",
+    "dev:admin": "npm run dev -w frontend/frontend-admin",
+    "build:user": "npm run build -w frontend/frontend-user",
+    "build:admin": "npm run build -w frontend/frontend-admin",
+    "build:all": "npm run build -w frontend/frontend-user && npm run build -w frontend/frontend-admin",
+    "lint:user": "npm run lint -w frontend/frontend-user",
+    "lint:admin": "npm run lint -w frontend/frontend-admin"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2"
