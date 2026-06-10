@@ -12,6 +12,7 @@ type Step = "choose" | "create" | "join";
 export function OnboardingPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user)!;
+  const refreshFamily = useAuthStore((s) => s.refreshFamily);
   const [step, setStep] = useState<Step>("choose");
   const [familyName, setFamilyName] = useState("");
   const [familyId, setFamilyId] = useState("");
@@ -22,6 +23,7 @@ export function OnboardingPage() {
     setLoading(true);
     try {
       await familyApi.createFamily(familyName.trim(), user.user_id);
+      await refreshFamily();
       toast.success("Đã tạo gia đình thành công!");
       navigate("/dashboard");
     } catch (err) {
@@ -36,6 +38,7 @@ export function OnboardingPage() {
     setLoading(true);
     try {
       await familyApi.joinFamilyById(familyId.trim(), user.user_id);
+      await refreshFamily();
       toast.success("Đã tham gia gia đình thành công!");
       navigate("/dashboard");
     } catch (err) {

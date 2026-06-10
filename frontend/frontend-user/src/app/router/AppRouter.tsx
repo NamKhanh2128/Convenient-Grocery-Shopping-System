@@ -1,4 +1,4 @@
-﻿import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation, Outlet } from "react-router-dom";
 import { MainLayout } from "@/layouts/MainLayout";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { LoginPage } from "@/modules/auth/pages/LoginPage";
@@ -25,7 +25,10 @@ import { OnboardingPage } from "@/pages/OnboardingPage";
 
 function ProtectedRoute() {
   const user = useAuthStore((state) => state.user);
+  const family = useAuthStore((state) => state.family);
   const loading = useAuthStore((state) => state.loading);
+  const location = useLocation();
+
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
@@ -33,7 +36,17 @@ function ProtectedRoute() {
       </div>
     );
   }
+  
   if (!user) return <Navigate to="/login" replace />;
+  
+  if (!family && location.pathname !== "/onboarding") {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  if (location.pathname === "/onboarding") {
+    return <Outlet />;
+  }
+
   return <MainLayout />;
 }
 
