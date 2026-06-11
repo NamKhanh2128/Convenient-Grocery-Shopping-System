@@ -141,6 +141,74 @@ class MealPlanModel {
     return this.addEntry({ userId, mealDate, mealType, recipeId: newRecipeId });
   }
 
+  static async autoGenerate({ userId, dates, overwrite = false }) {
+    const mealTypes = ['breakfast', 'lunch', 'dinner'];
+
+    const { rows: recipes } = await query(
+      `SELECT id FROM recipes WHERE is_public = true ORDER BY RANDOM() LIMIT 100`
+    );
+    if (!recipes.length) throw new Error('Chưa có công thức nào trong hệ thống để tạo kế hoạch.');
+
+    let recipeIdx = 0;
+    const added = [];
+
+    for (const date of dates) {
+      for (const dbMealType of mealTypes) {
+        const existing = await query(
+          `SELECT mpi.${c.itemId} AS id
+           FROM ${t.mealPlanItem} mpi
+           JOIN ${t.mealPlan} mp ON mp.${c.mealPlanId} = mpi.${c.itemMealPlanId}
+           WHERE mp.${c.userId} = $1 AND mpi.${c.mealDate} = $2 AND mpi.${c.mealType} = $3
+           LIMIT 1`,
+          [Number(userId), toDate(date), dbMealType]
+        );
+
+        if (existing.rows.length > 0 && !overwrite) continue;
+
+        if (overwrite && existing.rows.length > 0) {
+          await query(
+            `DELETE FROM ${t.mealPlanItem} mpi
+             USING ${t.mealPlan} mp
+             WHERE mp.${c.mealPlanId} = mpi.${c.itemMealPlanId}
+               AND mp.${c.userId} = $1
+               AND mpi.${c.mealDate} = $2
+               AND mpi.${c.mealType} = $3`,
+            [Number(userId), toDate(date), dbMealType]
+          );
+        }
+
+        const recipe = recipes[recipeIdx % recipes.length];
+        recipeIdx++;
+
+        const mealPlanId = await this.findOrCreatePlan({ userId, mealDate: date });
+        await query(
+          `INSERT INTO ${t.mealPlanItem} (${c.itemMealPlanId}, ${c.recipeId}, ${c.mealDate}, ${c.mealType})
+           VALUES ($1, $2, $3, $4)`,
+          [mealPlanId, Number(recipe.id), toDate(date), dbMealType]
+        );
+        added.push({ date, meal_type: fromDbMealType(dbMealType), recipe_id: recipe.id });
+      }
+    }
+
+    return added;
+  }
+
+  static async getItemCookedState({ userId, mealDate, mealType, recipeId }) {
+    const dbMealType = toDbMealType(mealType);
+    const result = await query(
+      `SELECT COALESCE(mpi.is_cooked, false) AS is_cooked
+       FROM ${t.mealPlanItem} mpi
+       JOIN ${t.mealPlan} mp ON mp.${c.mealPlanId} = mpi.${c.itemMealPlanId}
+       WHERE mp.${c.userId} = $1
+         AND mpi.${c.mealDate} = $2
+         AND mpi.${c.mealType} = $3
+         AND mpi.${c.recipeId} = $4
+       LIMIT 1`,
+      [Number(userId), toDate(mealDate), dbMealType, Number(recipeId)]
+    );
+    return Boolean(result.rows[0]?.is_cooked);
+  }
+
   static async markCooked({ userId, mealDate, mealType, recipeId, isCooked = true }) {
     const dbMealType = toDbMealType(mealType);
     await query(

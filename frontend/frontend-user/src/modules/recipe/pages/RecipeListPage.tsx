@@ -1,4 +1,4 @@
-import { ChefHat, Compass, Heart, Lightbulb, Plus, Search, Trash2 } from "lucide-react";
+import { ChefHat, Flame, Heart, Lightbulb, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -10,25 +10,37 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AppModal } from "@/shared/components/AppModal";
 
+const TIME_TAGS = [
+  { value: "all", label: "Tất cả" },
+  { value: "nhanh", label: "Nhanh <30p" },
+  { value: "vua", label: "Vừa 30–60p" },
+  { value: "lau", label: "Lâu >60p" },
+];
+
 export function RecipeListPage() {
   const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
   const {
     recipes,
-    categories,
+    popular,
     loading,
     error,
     search,
-    categoryId,
+    timeTag,
     privacy,
     setSearch,
-    setCategoryId,
+    setTimeTag,
     setPrivacy,
     load,
+    loadPopular,
     remove,
     toggleFavorite,
   } = useRecipeStore();
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadPopular(family.family_id);
+  }, [family.family_id, loadPopular]);
 
   useEffect(() => {
     const delay = search.trim() ? 250 : 0;
@@ -36,7 +48,7 @@ export function RecipeListPage() {
       void load(family.family_id);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [family.family_id, search, categoryId, privacy, load]);
+  }, [family.family_id, search, timeTag, privacy, load]);
 
   useEffect(() => {
     if (error) toast.error(error);
@@ -53,11 +65,7 @@ export function RecipeListPage() {
               <Lightbulb className="mr-2 h-4 w-4" />
               Gợi ý tủ lạnh
             </Button>
-            <Button variant="outline" onClick={() => navigate("/recipes/explore")}>
-              <Compass className="mr-2 h-4 w-4" />
-              Khám phá
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/favorites")}>
+<Button variant="outline" onClick={() => navigate("/favorites")}>
               <Heart className="mr-2 h-4 w-4" />
               Yêu thích
             </Button>
@@ -69,24 +77,60 @@ export function RecipeListPage() {
         }
       />
 
+      {popular.length > 0 && (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <Flame className="h-4 w-4 text-orange-500" />
+            <h2 className="text-sm font-bold text-gray-700">Công thức phổ biến</h2>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {popular.map((recipe) => (
+              <Link
+                key={recipe.recipe_id}
+                to={`/recipes/${recipe.recipe_id}`}
+                className="group relative w-36 flex-shrink-0 overflow-hidden rounded-xl shadow-sm transition hover:shadow-md"
+              >
+                <img
+                  className="h-24 w-full object-cover"
+                  src={recipe.image_url || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"}
+                  alt={recipe.recipe_name}
+                />
+                <div className="bg-white p-2">
+                  <p className="line-clamp-2 text-xs font-semibold text-gray-800 group-hover:text-[#7655aa]">
+                    {recipe.recipe_name}
+                  </p>
+                  {(recipe.cook_count ?? 0) > 0 && (
+                    <p className="mt-0.5 text-[10px] text-orange-500 font-medium">
+                      Đã nấu {recipe.cook_count} lần
+                    </p>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="relative min-w-[220px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-9" placeholder="Tìm theo tên..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <Select value={categoryId} onValueChange={setCategoryId}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Danh mục" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tất cả danh mục</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>
-                {cat.ten}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white p-1">
+          {TIME_TAGS.map((tag) => (
+            <button
+              key={tag.value}
+              onClick={() => setTimeTag(tag.value)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                timeTag === tag.value
+                  ? "bg-[#7655aa] text-white"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-[#7655aa]"
+              }`}
+            >
+              {tag.label}
+            </button>
+          ))}
+        </div>
         <Select value={privacy} onValueChange={setPrivacy}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Quyền" />

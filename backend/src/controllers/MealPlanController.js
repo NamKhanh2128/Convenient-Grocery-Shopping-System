@@ -1,4 +1,5 @@
 const MealPlanModel = require('../models/MealPlanModel');
+const RecipeModel = require('../models/RecipeModel');
 
 function getContext(req) {
   return {
@@ -31,6 +32,7 @@ class MealPlanController {
             meal_type: row.meal_type,
             recipe_id: String(row.recipe_id),
             recipe_name: row.recipe_name,
+            is_cooked: Boolean(row.is_cooked),
           })),
         },
         message: 'Meal plan loaded successfully',
@@ -95,12 +97,81 @@ class MealPlanController {
     }
   }
 
+  static async getMissingIngredients(req, res) {
+    try {
+      const { userId } = getContext(req);
+      const { from, to } = req.query;
+      if (!userId || !from || !to) {
+        return res.status(400).json({ success: false, message: 'Thiếu from/to date' });
+      }
+      const missing = await RecipeModel.getMissingForPlan({ userId, fromDate: from, toDate: to });
+      return res.status(200).json({ success: true, data: { missing }, message: 'OK' });
+    } catch (error) {
+      console.error('[MealPlanController.getMissingIngredients]', error);
+      return res.status(500).json({ success: false, message: error.message || 'Lỗi server' });
+    }
+  }
+
+  static async autoGenerate(req, res) {
+    try {
+      const { userId } = getContext(req);
+      const { mode = 'day', date, overwrite = false } = req.body;
+      if (!userId || !date) {
+        return res.status(400).json({ success: false, message: 'Thiếu userId hoặc date' });
+      }
+
+      const anchor = String(date).slice(0, 10);
+      let dates;
+      if (mode === 'week') {
+        const d = new Date(anchor + 'T00:00:00');
+        dates = Array.from({ length: 7 }, (_, i) => {
+          const day = new Date(d);
+          day.setDate(day.getDate() + i);
+          return day.toISOString().slice(0, 10);
+        });
+      } else {
+        dates = [anchor];
+      }
+
+      const added = await MealPlanModel.autoGenerate({ userId, dates, overwrite });
+      return res.status(200).json({
+        success: true,
+        data: { added },
+        message: `Đã tạo tự động ${added.length} bữa ăn`,
+      });
+    } catch (error) {
+      console.error('[MealPlanController.autoGenerate]', error);
+      return res.status(400).json({ success: false, message: error.message || 'Không thể tạo kế hoạch tự động' });
+    }
+  }
+
   static async cook(req, res) {
     try {
       const { userId } = getContext(req);
       const { meal_date, meal_type, recipe_id, is_cooked = true } = req.body;
       if (!userId || !meal_date || !meal_type || !recipe_id) {
         return res.status(400).json({ success: false, message: 'Missing fields for mark-cooked' });
+      }
+
+      if (is_cooked) {
+        const wasCooked = await MealPlanModel.getItemCookedState({
+          userId, mealDate: meal_date, mealType: meal_type, recipeId: recipe_id,
+        });
+
+        if (!wasCooked) {
+          // Check if all ingredients are available before allowing mark-as-cooked
+          const check = await RecipeModel.getMissingForRecipe({ recipeId: recipe_id, userId });
+          if (check && check.missing.length > 0) {
+            return res.status(200).json({
+              success: true,
+              data: { can_cook: false, missing: check.missing },
+              message: 'Thiếu nguyên liệu',
+            });
+          }
+
+          // All ingredients available — deduct from fridge then mark cooked
+          await RecipeModel.deductIngredientsBestEffort({ recipeId: recipe_id, userId });
+        }
       }
 
       await MealPlanModel.markCooked({
@@ -110,6 +181,7 @@ class MealPlanController {
         recipeId: recipe_id,
         isCooked: is_cooked,
       });
+
       return res.status(200).json({ success: true, data: null, message: is_cooked ? 'Đã đánh dấu đã nấu' : 'Đã bỏ đánh dấu đã nấu' });
     } catch (error) {
       console.error('[MealPlanController.cook]', error);

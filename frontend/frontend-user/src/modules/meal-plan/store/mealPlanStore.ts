@@ -72,6 +72,8 @@ interface MealPlanState {
 
   suggestions: RecipeSuggestion[];
 
+  planMissing: Array<{ food_name: string; quantity: number; unit: string }>;
+
   loading: boolean;
 
   familyId: string | null;
@@ -112,6 +114,8 @@ interface MealPlanState {
 
   createShoppingFromMissing: (familyId: string, userId: string) => Promise<void>;
 
+  autoGenerateMealPlan: (mode: "day" | "week", overwrite?: boolean) => Promise<void>;
+
 }
 
 
@@ -129,6 +133,8 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
   recipes: [],
 
   suggestions: [],
+
+  planMissing: [],
 
   loading: false,
 
@@ -171,6 +177,12 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
         set({ suggestions });
 
       }).catch(() => set({ suggestions: [] }));
+
+      void mealApi.getMissingIngredients(familyId, days[0], days[6]).then((planMissing) => {
+
+        set({ planMissing });
+
+      }).catch(() => set({ planMissing: [] }));
 
     } catch {
 
@@ -351,7 +363,25 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
   createShoppingFromMissing: async (familyId, userId) => {
 
-    await mealApi.createShoppingListForMissing(familyId, userId, "Nguyên liệu thiếu từ kế hoạch bữa ăn");
+    const { planMissing } = get();
+
+    await mealApi.createShoppingFromPlan(familyId, userId, planMissing);
+
+    await get().loadWeek(familyId);
+
+  },
+
+
+
+  autoGenerateMealPlan: async (mode, overwrite = false) => {
+
+    const { familyId, weekAnchor, weekDays } = get();
+
+    if (!familyId) return;
+
+    const anchorDate = mode === "week" ? weekDays[0] : localIso(new Date());
+
+    await mealApi.autoGenerate(familyId, mode, anchorDate, overwrite);
 
     await get().loadWeek(familyId);
 

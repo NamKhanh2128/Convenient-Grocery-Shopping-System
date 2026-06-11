@@ -28,6 +28,8 @@ type BackendMealPlan = {
 
   recipe_id: string;
 
+  is_cooked?: boolean;
+
 };
 
 
@@ -248,7 +250,7 @@ export const mealApi = {
 
     if (useMealBackend) {
 
-      unwrapApiData(
+      const result = unwrapApiData<{ can_cook?: boolean; missing?: Array<{ food_name: string; quantity: number; unit: string }> }>(
 
         await apiClient.patch("/meal-plans/cook", {
 
@@ -266,6 +268,14 @@ export const mealApi = {
 
       );
 
+      if (result?.can_cook === false) {
+
+        const err = Object.assign(new Error("MISSING_INGREDIENTS"), { missing: result.missing ?? [] });
+
+        throw err;
+
+      }
+
       return;
 
     }
@@ -275,6 +285,57 @@ export const mealApi = {
   },
 
 
+
+  async getMissingIngredients(
+    family_id: string,
+    from: string,
+    to: string,
+  ): Promise<Array<{ food_name: string; quantity: number; unit: string }>> {
+    if (useMealBackend) {
+      const data = unwrapApiData<{ missing: Array<{ food_name: string; quantity: number; unit: string }> }>(
+        await apiClient.get("/meal-plans/missing-ingredients", {
+          params: { familyGroupId: family_id, from, to },
+        }),
+      );
+      return data.missing;
+    }
+    return [];
+  },
+
+  async createShoppingFromPlan(
+    family_id: string,
+    user_id: string,
+    missing: Array<{ food_name: string; quantity: number; unit: string }>,
+  ) {
+    if (!missing.length) throw new Error("Không có nguyên liệu thiếu để tạo danh sách mua.");
+    return shoppingApi.create({
+      family_id,
+      title: "Nguyên liệu thiếu từ kế hoạch bữa ăn",
+      plan_date: new Date().toISOString().slice(0, 10),
+      list_type: "daily",
+      created_by: user_id,
+      items: missing.map((m) => ({
+        food_name: m.food_name,
+        quantity: m.quantity,
+        unit: m.unit as FoodUnit,
+        category: "Khác" as FoodCategory,
+      })),
+    });
+  },
+
+  async autoGenerate(family_id: string, mode: "day" | "week", anchorDate: string, overwrite = false) {
+    if (useMealBackend) {
+      unwrapApiData(
+        await apiClient.post("/meal-plans/auto-generate", {
+          familyGroupId: family_id,
+          mode,
+          date: anchorDate,
+          overwrite,
+        }),
+      );
+      return;
+    }
+  },
 
   async createShoppingListForMissing(family_id: string, user_id: string, title: string) {
 

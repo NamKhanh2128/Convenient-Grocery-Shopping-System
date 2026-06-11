@@ -27,12 +27,13 @@ export type RecipeDetail = Recipe & {
   danh_muc_ten?: string | null;
   khau_phan?: number;
   ingredient_count?: number;
+  cook_count?: number;
   ingredients: Array<RecipeIngredient & { food: Food }>;
 };
 
 export type RecipeListFilters = {
   search?: string;
-  categoryId?: string;
+  timeTag?: string;
   privacy?: string;
 };
 
@@ -60,6 +61,7 @@ type BackendRecipe = {
   danh_muc: { id: string; ten: string | null } | null;
   da_yeu_thich?: boolean;
   ingredient_count?: number;
+  cook_count?: number;
   nguyen_lieu: BackendIngredient[];
 };
 
@@ -138,6 +140,7 @@ function toRecipeDetail(recipe: BackendRecipe | null | undefined): RecipeDetail 
     time_minutes: recipe.thoi_gian_phut || 30,
     khau_phan: recipe.khau_phan ?? 2,
     ingredient_count: recipe.ingredient_count ?? recipe.nguyen_lieu?.length ?? 0,
+    cook_count: recipe.cook_count ?? 0,
     calories: recipe.calories ?? Math.max(150, (recipe.ingredient_count ?? recipe.nguyen_lieu?.length ?? 0) * 80),
     difficulty: recipe.do_kho || "Trung bình",
     is_favorite: recipe.da_yeu_thich ?? false,
@@ -178,7 +181,7 @@ function buildListParams(
   const params: Record<string, string> = {};
   if (familyId) params.familyGroupId = familyId;
   if (filters?.search?.trim()) params.search = filters.search.trim();
-  if (filters?.categoryId && filters.categoryId !== "all") params.categoryId = filters.categoryId;
+  if (filters?.timeTag && filters.timeTag !== "all") params.timeTag = filters.timeTag;
   if (filters?.privacy && filters.privacy !== "all") params.privacy = filters.privacy;
   if (options?.lite !== false) params.lite = "true";
   return { params };
@@ -217,6 +220,15 @@ export const recipeApi = {
   async listFavorites(familyId?: string): Promise<RecipeDetail[]> {
     const data = unwrapApiData<{ recipes: BackendRecipe[] }>(
       await apiClient.get("/recipes/favorites", familyId ? { params: { familyGroupId: familyId } } : {}),
+    );
+    return data.recipes.map(toRecipeDetail);
+  },
+
+  async popular(familyId?: string, limit = 5): Promise<RecipeDetail[]> {
+    const data = unwrapApiData<{ recipes: BackendRecipe[] }>(
+      await apiClient.get("/recipes/popular", {
+        params: { familyGroupId: familyId, limit },
+      }),
     );
     return data.recipes.map(toRecipeDetail);
   },

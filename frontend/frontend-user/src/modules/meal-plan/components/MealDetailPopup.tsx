@@ -45,6 +45,11 @@ export function MealDetailPopup() {
   const [replaceTarget, setReplaceTarget] = useState<{ slot: MealSlot; recipe: RecipeDetail } | null>(null);
   const [viewingRecipe, setViewingRecipe] = useState<RecipeDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cookWarning, setCookWarning] = useState<{
+    slot: MealSlot;
+    recipeId: string;
+    missing: Array<{ food_name: string; quantity: number; unit: string }>;
+  } | null>(null);
 
   const open = Boolean(editingDate);
 
@@ -107,12 +112,17 @@ export function MealDetailPopup() {
   async function handleToggleCooked(slot: MealSlot, recipe: RecipeDetail) {
     if (!editingDate) return;
     const wasCooked = isRecipeCooked(editingDate, slot, recipe.recipe_id);
+    setCookWarning(null);
     setSubmitting(true);
     try {
       await markRecipeCooked(editingDate, slot, recipe.recipe_id, !wasCooked);
-      toast.success(wasCooked ? "Đã bỏ đánh dấu nấu." : "Đã đánh dấu đã nấu!");
-    } catch {
-      toast.error("Không thể cập nhật trạng thái nấu.");
+      toast.success(wasCooked ? "Đã bỏ đánh dấu nấu." : "Đã đánh dấu đã nấu! Nguyên liệu đã được trừ khỏi tủ lạnh.");
+    } catch (err: any) {
+      if (err?.missing?.length) {
+        setCookWarning({ slot, recipeId: recipe.recipe_id, missing: err.missing });
+      } else {
+        toast.error("Không thể cập nhật trạng thái nấu.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -190,8 +200,10 @@ export function MealDetailPopup() {
                         {recipes.map((recipe) => {
                           const missing = getMissingForRecipe(recipe.recipe_id);
                           const cooked = isRecipeCooked(editingDate, slot, recipe.recipe_id);
+                          const warn = cookWarning?.slot === slot && cookWarning?.recipeId === recipe.recipe_id ? cookWarning : null;
                           return (
-                            <div key={recipe.recipe_id} className={`flex flex-col gap-3 rounded-xl border bg-white p-3 sm:flex-row sm:items-center ${cooked ? "opacity-70 ring-1 ring-green-300" : ""}`}>
+                            <div key={recipe.recipe_id} className="space-y-2">
+                            <div className={`flex flex-col gap-3 rounded-xl border bg-white p-3 sm:flex-row sm:items-center ${cooked ? "opacity-70 ring-1 ring-green-300" : ""}`}>
                               <div className="relative h-20 w-full shrink-0 sm:w-24">
                                 <img
                                   src={recipeImgSrc(recipe.image_url)}
@@ -249,6 +261,23 @@ export function MealDetailPopup() {
                                   <Trash2 className="mr-1 h-4 w-4" />{t("removeButton")}
                                 </Button>
                               </div>
+                            </div>
+                            {warn && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                                <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800">
+                                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                                  Không đủ nguyên liệu để đánh dấu đã nấu
+                                </div>
+                                <ul className="space-y-0.5 text-amber-700">
+                                  {warn.missing.map((m) => (
+                                    <li key={m.food_name} className="flex items-center gap-1">
+                                      <span className="font-medium">{m.food_name}</span>
+                                      <span className="text-amber-500">— thiếu {m.quantity} {m.unit}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             </div>
                           );
                         })}
