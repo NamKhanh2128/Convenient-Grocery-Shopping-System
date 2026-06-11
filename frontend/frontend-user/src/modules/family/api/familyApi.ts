@@ -28,11 +28,13 @@ export type SentFamilyInvitation = {
   id: number;
   invitationId: number;
   groupId: string;
-  invitedUserId: string;
+  invitedUserId: string | null;
+  invitedEmail: string | null;
   status: string;
   createdAt: string;
+  expiresAt: string | null;
   email: string;
-  fullName: string;
+  fullName: string | null;
 };
 
 export type ReceivedFamilyInvitation = {
@@ -44,6 +46,15 @@ export type ReceivedFamilyInvitation = {
   familyName: string;
   familyCode: string;
   inviterName: string;
+};
+
+export type InvitationTokenInfo = {
+  familyName: string;
+  familyCode: string;
+  inviterName: string;
+  invitedEmail: string | null;
+  status: string;
+  expiresAt: string | null;
 };
 
 function getToken() {
@@ -179,6 +190,38 @@ export const familyApi = {
       method: "PATCH",
       body: JSON.stringify({ targetUserId }),
     });
+  },
+  // ─── Email invitation methods (Phase 3) ────────────────────────────────────
+  async inviteByEmail(email: string): Promise<SentFamilyInvitation> {
+    return request<SentFamilyInvitation>("/api/family/invitations", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+  async getInvitationByToken(token: string): Promise<InvitationTokenInfo> {
+    return request<InvitationTokenInfo>(`/api/family/invitations/token/${encodeURIComponent(token)}`);
+  },
+  async acceptInvitationByToken(token: string): Promise<Family> {
+    const family = normalizeFamily(
+      await request<FamilyDto>(`/api/family/invitations/token/${encodeURIComponent(token)}/accept`, {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      })
+    );
+    if (!family) throw new Error("Khong the chap nhan loi moi.");
+    return family;
+  },
+  async resendInvitation(invitationId: number | string): Promise<SentFamilyInvitation> {
+    return request<SentFamilyInvitation>(
+      `/api/family/invitations/${encodeURIComponent(String(invitationId))}/resend`,
+      { method: "POST" }
+    );
+  },
+  async cancelInvitation(invitationId: number | string): Promise<void> {
+    await request<unknown>(
+      `/api/family/invitations/${encodeURIComponent(String(invitationId))}`,
+      { method: "DELETE" }
+    );
   },
   async assignShoppingTask(_family_id: string, _shopping_list_id: string, _user_id: string, _actor_id: string) {
     throw new Error("Chuc nang phan cong mua hang chua co API backend.");

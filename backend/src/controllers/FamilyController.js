@@ -1,4 +1,7 @@
 const { FamilyModel } = require('../models/FamilyModel');
+const { emailService } = require('../services/emailService');
+
+const FRONTEND_USER_URL = process.env.FRONTEND_USER_URL || 'http://localhost:5173';
 
 function ok(res, data, message = 'OK') {
   return res.json({ success: true, data, message });
@@ -203,10 +206,177 @@ const FamilyController = {
 
   async listReceivedInvitations(req, res) {
     try {
-      const invitations = await FamilyModel.listReceivedInvitations(getRequestUserId(req));
+      const invitations = await FamilyModel.listReceivedInvitations(
+        getRequestUserId(req),
+        req.user?.email
+      );
       return ok(res, invitations, 'Lay danh sach loi moi cua toi thanh cong.');
     } catch (error) {
       console.error('[Family] error:', error);
+      return fail(res, 500, error.message);
+    }
+  },
+
+  // ─── Email invitation endpoints ─────────────────────────────────────────────
+
+  async inviteByEmail(req, res) {
+    try {
+      const email = String(req.body?.email || '').trim();
+      if (!email) return fail(res, 400, 'Email người được mời là bắt buộc.');
+
+      const currentUserId = getRequestUserId(req);
+      const current = await getCurrentFamily(currentUserId);
+      if (current.status) return fail(res, current.status, current.message);
+      if (!current.family) return fail(res, 400, 'Bạn chưa thuộc gia đình nào.');
+
+      // Only family admin can invite
+      const currentMember = await FamilyModel.findMember(currentUserId, current.family.family_id);
+      if (currentMember?.role !== 'admin') {
+        return fail(res, 403, 'Chỉ quản trị viên gia đình mới có thể gửi lời mời.');
+      }
+
+      const result = await FamilyModel.createEmailInvitation({
+        familyId: current.family.family_id,
+        inviterUserId: currentUserId,
+        email,
+      });
+
+      if (result.status === 'already_member') {
+        return fail(res, 409, 'Người dùng đã là thành viên của gia đình này.');
+      }
+      if (result.status === 'already_invited') {
+        return fail(res, 409, 'Đã có lời mời đang chờ dành cho email này.');
+      }
+
+      const inviterUser = await FamilyModel.findUserById(currentUserId);
+      const acceptUrl = `${FRONTEND_USER_URL}/invitations/accept?token=${result.rawToken}`;
+
+      emailService
+        .sendFamilyInvitationEmail(email, {
+          familyName: current.family.family_name,
+          inviterName: inviterUser?.full_name || 'Thành viên gia đình',
+          acceptUrl,
+        })
+        .catch((err) => console.error('[Family] email send error:', err));
+
+      return ok(res, result.invitation, 'Đã gửi lời mời tham gia gia đình.');
+    } catch (error) {
+      console.error('[Family] inviteByEmail error:', error);
+      return fail(res, 500, error.message);
+    }
+  },
+
+  async getInvitationByToken(req, res) {
+    try {
+      const rawToken = String(req.params.token || '').trim();
+      if (!rawToken) return fail(res, 400, 'Thiếu token lời mời.');
+
+      const invitation = await FamilyModel.findInvitationByToken(rawToken);
+      if (!invitation) return fail(res, 404, 'Lời mời không tồn tại, đã hết hạn hoặc đã được sử dụng.');
+      if (!['pending'].includes(invitation.status)) {
+        return fail(res, 410, `Lời mời không còn hợp lệ (trạng thái: ${invitation.status}).`);
+      }
+
+      return ok(res, {
+        familyName: invitation.familyName,
+        familyCode: invitation.familyCode,
+        inviterName: invitation.inviterName,
+        invitedEmail: invitation.invitedEmail,
+        status: invitation.status,
+        expiresAt: invitation.expiresAt,
+      }, 'Lấy thông tin lời mời thành công.');
+    } catch (error) {
+      console.error('[Family] getInvitationByToken error:', error);
+      return fail(res, 500, error.message);
+    }
+  },
+
+  async acceptInvitationByToken(req, res) {
+    try {
+      // Token is in the URL path (/invitations/token/:token/accept)
+      // but also accept it from the request body for forward-compatibility.
+      const rawToken = String(req.params?.token || req.body?.token || '').trim();
+      if (!rawToken) return fail(res, 400, 'Thiếu token lời mời.');
+
+      const userId = getRequestUserId(req);
+      const userEmail = req.user?.email;
+
+      const result = await FamilyModel.acceptInvitationByToken(rawToken, userId, userEmail);
+
+      if (result.status === 'not_found') return fail(res, 404, 'Lời mời không tồn tại hoặc không hợp lệ.');
+      if (result.status === 'expired') return fail(res, 410, 'Lời mời đã hết hạn.');
+      if (result.status === 'not_pending') return fail(res, 409, 'Lời mời này đã được xử lý.');
+      if (result.status === 'email_mismatch') {
+        return fail(res, 403, 'Lời mời này không dành cho tài khoản của bạn.');
+      }
+
+      return ok(res, toFamilyDto(result.family), 'Đã tham gia gia đình thành công.');
+    } catch (error) {
+      console.error('[Family] acceptInvitationByToken error:', error);
+      return fail(res, 500, error.message);
+    }
+  },
+
+  async resendInvitation(req, res) {
+    try {
+      const invitationId = String(req.params.id || '').trim();
+      if (!invitationId) return fail(res, 400, 'Thiếu ID lời mời.');
+
+      const currentUserId = getRequestUserId(req);
+      const current = await getCurrentFamily(currentUserId);
+      if (current.status) return fail(res, current.status, current.message);
+      if (!current.family) return fail(res, 400, 'Bạn chưa thuộc gia đình nào.');
+
+      const currentMember = await FamilyModel.findMember(currentUserId, current.family.family_id);
+      if (currentMember?.role !== 'admin') {
+        return fail(res, 403, 'Chỉ quản trị viên gia đình mới có thể gửi lại lời mời.');
+      }
+
+      const result = await FamilyModel.resendInvitation(invitationId, current.family.family_id);
+      if (!result) return fail(res, 404, 'Lời mời không tồn tại hoặc không thể gửi lại.');
+
+      const inviterUser = await FamilyModel.findUserById(currentUserId);
+      const acceptUrl = `${FRONTEND_USER_URL}/invitations/accept?token=${result.rawToken}`;
+      const invitedEmail = result.invitation.invitedEmail;
+
+      if (invitedEmail) {
+        emailService
+          .sendFamilyInvitationEmail(invitedEmail, {
+            familyName: current.family.family_name,
+            inviterName: inviterUser?.full_name || 'Thành viên gia đình',
+            acceptUrl,
+          })
+          .catch((err) => console.error('[Family] resend email error:', err));
+      }
+
+      return ok(res, result.invitation, 'Đã gửi lại lời mời.');
+    } catch (error) {
+      console.error('[Family] resendInvitation error:', error);
+      return fail(res, 500, error.message);
+    }
+  },
+
+  async cancelInvitation(req, res) {
+    try {
+      const invitationId = String(req.params.id || '').trim();
+      if (!invitationId) return fail(res, 400, 'Thiếu ID lời mời.');
+
+      const currentUserId = getRequestUserId(req);
+      const current = await getCurrentFamily(currentUserId);
+      if (current.status) return fail(res, current.status, current.message);
+      if (!current.family) return fail(res, 400, 'Bạn chưa thuộc gia đình nào.');
+
+      const currentMember = await FamilyModel.findMember(currentUserId, current.family.family_id);
+      if (currentMember?.role !== 'admin') {
+        return fail(res, 403, 'Chỉ quản trị viên gia đình mới có thể hủy lời mời.');
+      }
+
+      const cancelled = await FamilyModel.cancelInvitation(invitationId, current.family.family_id);
+      if (!cancelled) return fail(res, 404, 'Lời mời không tồn tại hoặc không thể hủy.');
+
+      return ok(res, cancelled, 'Đã hủy lời mời.');
+    } catch (error) {
+      console.error('[Family] cancelInvitation error:', error);
       return fail(res, 500, error.message);
     }
   },

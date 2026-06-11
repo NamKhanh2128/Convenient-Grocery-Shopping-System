@@ -1,7 +1,15 @@
+/**
+ * Phase 4 — Security Hardening
+ *
+ * Consolidated auth middleware.
+ * - Mock tokens are DISABLED in production (NODE_ENV=production).
+ * - In dev/test, mock-token-<userId> is still allowed for quick testing.
+ */
 const { FamilyModel } = require('../models/FamilyModel');
 const { authTokenService } = require('../services/authService');
 
-const INVALID_TOKEN_MESSAGE = 'Token khong hop le hoac da het han';
+const IS_PROD = process.env.NODE_ENV === 'production';
+const INVALID_TOKEN_MESSAGE = 'Token không hợp lệ hoặc đã hết hạn';
 
 function devEmailFromId(userId) {
   return `${String(userId || 'dev-user').trim().toLowerCase()}@dev.local`;
@@ -23,6 +31,9 @@ async function authMiddleware(req, res, next) {
     let user;
 
     if (token.startsWith('mock-token-')) {
+      if (IS_PROD) {
+        return res.status(401).json({ message: 'Mock tokens are disabled in production.' });
+      }
       const rawId = token.replace('mock-token-', '') || 'dev-user';
       user = await resolveRequestUser({
         userId: rawId,
@@ -46,7 +57,7 @@ async function authMiddleware(req, res, next) {
     };
     return next();
   } catch (error) {
-    console.error('[Family] error:', error);
+    console.error('[Auth] middleware error:', error.message);
     return res.status(401).json({ message: INVALID_TOKEN_MESSAGE });
   }
 }

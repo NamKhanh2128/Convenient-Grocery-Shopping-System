@@ -128,13 +128,20 @@ export function FamilyPage() {
         return;
       }
 
-      await familyApi.addMember(currentFamily.family_id, nextEmail);
+      await familyApi.inviteByEmail(nextEmail);
       await reload();
       setEmail("");
       setModal(null);
-      toast.success("Đã gửi lời mời tham gia gia đình.");
+      toast.success("Đã gửi lời mời tham gia gia đình qua email.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Không thể thêm thành viên.");
+      const msg = err instanceof Error ? err.message : "Không thể gửi lời mời.";
+      if (msg.includes("already_invited") || msg.toLowerCase().includes("đã có lời mời")) {
+        toast.error("Đã có lời mời đang chờ cho email này. Bạn có thể gửi lại từ danh sách bên dưới.");
+      } else if (msg.includes("already_member") || msg.toLowerCase().includes("đã là thành viên")) {
+        toast.error("Email này đã là thành viên của gia đình.");
+      } else {
+        toast.error(msg);
+      }
     }
   }
 
@@ -415,9 +422,69 @@ export function FamilyPage() {
               <div className="space-y-2">
                 {sentInvitations.map((invitation) => (
                   <div key={invitation.id} className="rounded-[8px] bg-[#f8f6fb] p-3">
-                    <b>{invitation.fullName}</b>
-                    <p className="text-xs text-[#746d82]">{invitation.email}</p>
-                    <p className="mt-1 text-xs font-bold text-[#7655aa]">Đang chờ chấp nhận</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <b className="block truncate">{invitation.fullName ?? invitation.email}</b>
+                        <p className="truncate text-xs text-[#746d82]">{invitation.invitedEmail ?? invitation.email}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+                            invitation.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                            invitation.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                            invitation.status === 'expired' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {invitation.status === 'pending' ? 'Đang chờ' :
+                             invitation.status === 'accepted' ? 'Đã chấp nhận' :
+                             invitation.status === 'expired' ? 'Hết hạn' :
+                             invitation.status === 'cancelled' ? 'Đã hủy' :
+                             invitation.status}
+                          </span>
+                          {invitation.expiresAt && invitation.status === 'pending' && (
+                            <span className="text-xs text-[#9188a1]">
+                              Hết hạn: {new Date(invitation.expiresAt).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {isCurrentAdmin && invitation.status === 'pending' && (
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs"
+                            onClick={async () => {
+                              try {
+                                await familyApi.resendInvitation(invitation.id);
+                                toast.success("Đã gửi lại lời mời.");
+                                await reload();
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : "Không thể gửi lại.");
+                              }
+                            }}
+                          >
+                            Gửi lại
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs text-red-600 hover:bg-red-50"
+                            onClick={async () => {
+                              const confirmed = window.confirm("Bạn có chắc muốn hủy lời mời này không?");
+                              if (!confirmed) return;
+                              try {
+                                await familyApi.cancelInvitation(invitation.id);
+                                toast.success("Đã hủy lời mời.");
+                                await reload();
+                              } catch (err) {
+                                toast.error(err instanceof Error ? err.message : "Không thể hủy.");
+                              }
+                            }}
+                          >
+                            Hủy
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

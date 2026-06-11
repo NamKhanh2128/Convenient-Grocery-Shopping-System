@@ -25,6 +25,7 @@ import { ChangePasswordPage } from "@/modules/auth/pages/ChangePasswordPage";
 import { SplashPage } from "@/pages/SplashPage";
 import { StatisticsPage } from "@/modules/statistics/pages/StatisticsPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
+import { InvitationAcceptPage } from "@/pages/InvitationAcceptPage";
 
 function ProtectedRoute() {
   const user = useAuthStore((state) => state.user);
@@ -63,6 +64,8 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+        {/* Public invitation accept route - accessible without auth */}
+        <Route path="/invitations/accept" element={<InvitationAcceptPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/fridge" element={<FridgePage />} />

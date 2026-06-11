@@ -2,6 +2,7 @@ const express = require('express');
 const { FamilyController } = require('../controllers/FamilyController');
 const { FamilyModel } = require('../models/FamilyModel');
 const { authTokenService } = require('../services/authService');
+const { invitationLimiter } = require('../middlewares/rateLimitMiddleware');
 
 const router = express.Router();
 
@@ -28,13 +29,15 @@ async function authenticateFamilyRequest(req, res, next) {
   try {
     let user;
 
-    if (token.startsWith('mock-token-')) {
+    if (token.startsWith('mock-token-') && process.env.NODE_ENV !== 'production') {
       const rawId = token.replace('mock-token-', '') || 'dev-user';
       user = await resolveRequestUser({
         userId: rawId,
         email: devEmailFromId(rawId),
         fullName: rawId,
       });
+    } else if (token.startsWith('mock-token-')) {
+      return res.status(401).json({ success: false, data: null, message: 'Mock tokens are disabled in production.' });
     } else {
       const payload = authTokenService.verifyAccessToken(token);
       const userId = payload.user_id || payload.id || payload.sub;
@@ -53,6 +56,11 @@ async function authenticateFamilyRequest(req, res, next) {
   }
 }
 
+// ─── Public routes (no auth) ─────────────────────────────────────────────────
+// Must be registered BEFORE the auth middleware to avoid 401 on public routes.
+router.get('/invitations/token/:token', FamilyController.getInvitationByToken);
+
+// ─── Authenticated routes ─────────────────────────────────────────────────────
 router.use(authenticateFamilyRequest);
 
 router.get('/me', FamilyController.getMe);
@@ -64,9 +72,17 @@ router.post('/members', FamilyController.addMember);
 router.delete('/members/:id', FamilyController.removeMember);
 router.delete('/leave', FamilyController.leave);
 router.patch('/admin/transfer', FamilyController.transferAdmin);
+
+// Specific token-based routes MUST come before /:id wildcard routes in Express
+router.post('/invitations', invitationLimiter, FamilyController.inviteByEmail);
+router.post('/invitations/token/:token/accept', FamilyController.acceptInvitationByToken);
+
+// Parameterized invitation routes (by invitation ID)
 router.get('/invitations/sent', FamilyController.listSentInvitations);
 router.get('/invitations/received', FamilyController.listReceivedInvitations);
 router.post('/invitations/:id/accept', FamilyController.acceptInvitation);
 router.post('/invitations/:id/reject', FamilyController.rejectInvitation);
+router.post('/invitations/:id/resend', invitationLimiter, FamilyController.resendInvitation);
+router.delete('/invitations/:id', FamilyController.cancelInvitation);
 
 module.exports = router;

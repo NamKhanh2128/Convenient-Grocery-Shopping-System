@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bridge = require('../utils/shoppingBridge');
+const { query } = require('../config/db');
 const ShoppingModel = require('../models/ShoppingModel');
 const FridgeItemModel = require('../models/FridgeItemModel');
 
@@ -12,15 +13,24 @@ async function resolveMockUser(token) {
   const user_id = await bridge.resolveShoppingUserId(mockId);
   const family_id = await bridge.resolveShoppingGroupId('family-1');
   const gia_dinh_id = await FridgeItemModel.resolveGiaDinhId('family-1');
+
+  // Role must be looked up from the database. Mock tokens must NEVER
+  // be granted ADMIN access by default - that is a privilege escalation.
+  const { rows } = await query(
+    'SELECT email, full_name, role FROM users WHERE id = $1 LIMIT 1',
+    [user_id]
+  );
+  const dbUser = rows[0];
+
   const user = {
     user_id,
     id: user_id,
     family_id,
     family_group_id: family_id,
     gia_dinh_id,
-    email: 'dev@nateat.vn',
-    full_name: 'Dev User',
-    role: 'ADMIN',
+    email: dbUser?.email || 'dev@nateat.vn',
+    full_name: dbUser?.full_name || 'Dev User',
+    role: String(dbUser?.role || 'user').toUpperCase(),
   };
   mockUserCache.set(token, user);
   return user;
@@ -60,6 +70,9 @@ function authRequired(req, res, next) {
   const token = header.split(' ')[1];
 
   if (token.startsWith('mock-token-')) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(401).json({ message: 'Token mock không được phép trong môi trường production.' });
+    }
     resolveMockUser(token)
       .then((user) => {
         req.user = user;

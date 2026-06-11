@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, LogIn, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAuthStore } from "@/modules/auth/store/authStore";
@@ -20,6 +20,8 @@ type FormValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
   const login = useAuthStore((state) => state.login);
   const loading = useAuthStore((state) => state.loading);
   const t = useT();
@@ -37,7 +39,7 @@ export function LoginPage() {
     try {
       await login(values.email, values.password, values.remember);
       toast.success("Đăng nhập thành công");
-      navigate("/dashboard", { replace: true });
+      navigate(returnTo ?? "/dashboard", { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Email hoặc mật khẩu không đúng";
       if (message.toLowerCase().includes("khóa")) setLockedOpen(true);
