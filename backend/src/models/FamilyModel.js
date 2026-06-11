@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { familySchema: schema } = require('../config/familySchema');
 
@@ -5,6 +6,11 @@ const f = schema.family;
 const u = schema.user;
 const m = schema.member;
 const invitationTable = 'family_invitations';
+const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 let schemaReadyPromise;
 
@@ -43,6 +49,8 @@ function normalizeInvitation(row) {
     status: row.status,
     createdAt: row.created_at,
     respondedAt: row.responded_at,
+    expiresAt: row.expires_at === undefined ? null : row.expires_at,
+    invitedEmail: row.invited_email === undefined ? null : row.invited_email,
     email: row.email,
     fullName: row.full_name,
     familyName: row.family_name,
@@ -85,6 +93,29 @@ async function ensureSchema() {
         )`
       );
       await pool.query(
+        `ALTER TABLE ${invitationTable} ALTER COLUMN invited_user_id DROP NOT NULL`
+      );
+      await pool.query(
+        `ALTER TABLE ${invitationTable} ADD COLUMN IF NOT EXISTS invited_email VARCHAR(255)`
+      );
+      await pool.query(
+        `ALTER TABLE ${invitationTable} ADD COLUMN IF NOT EXISTS token_hash VARCHAR(64) UNIQUE`
+      );
+      await pool.query(
+        `ALTER TABLE ${invitationTable} ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`
+      );
+      await pool.query(
+        `UPDATE ${invitationTable} fi
+         SET invited_email = ${u.table}.${u.email}
+         FROM ${u.table}
+         WHERE fi.invited_email IS NULL AND fi.invited_user_id = ${u.table}.${u.id}`
+      );
+      await pool.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS family_invitations_pending_email_idx
+         ON ${invitationTable} (group_id, lower(invited_email))
+         WHERE status = 'pending'`
+      );
+      await pool.query(
         `DELETE FROM ${m.table} a
          USING ${m.table} b
          WHERE a.${m.id} > b.${m.id}
@@ -114,6 +145,14 @@ async function ensureSchema() {
   }
 
   return schemaReadyPromise;
+}
+
+async function expirePendingInvitations() {
+  await pool.query(
+    `UPDATE ${invitationTable}
+     SET status = 'expired'
+     WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < NOW()`
+  );
 }
 
 const FamilyModel = {
@@ -378,29 +417,47 @@ const FamilyModel = {
 
   async listSentInvitations(familyId) {
     await ensureSchema();
+    await expirePendingInvitations();
     const { rows } = await pool.query(
       `SELECT
         fi.id,
         fi.group_id,
         fi.inviter_user_id,
         fi.invited_user_id,
+        fi.invited_email,
         fi.status,
         fi.created_at,
         fi.responded_at,
-        ${u.table}.${u.email} AS email,
+        fi.expires_at,
+        COALESCE(${u.table}.${u.email}, fi.invited_email) AS email,
         ${u.table}.${u.fullName} AS full_name
        FROM ${invitationTable} fi
-       JOIN ${u.table} ON ${u.table}.${u.id} = fi.invited_user_id
-       WHERE fi.group_id::text = $1 AND fi.status = 'pending'
-       ORDER BY fi.created_at DESC`,
+       LEFT JOIN ${u.table} ON ${u.table}.${u.id} = fi.invited_user_id
+       WHERE fi.group_id::text = $1
+       ORDER BY
+        CASE WHEN fi.status = 'pending' THEN 0 ELSE 1 END,
+        fi.created_at DESC`,
       [String(familyId)]
     );
 
     return rows.map(normalizeInvitation);
   },
 
-  async listReceivedInvitations(userId) {
+  async listReceivedInvitations(userId, userEmail) {
     await ensureSchema();
+    await expirePendingInvitations();
+
+    if (userEmail) {
+      await pool.query(
+        `UPDATE ${invitationTable}
+         SET invited_user_id = $1
+         WHERE invited_user_id IS NULL
+           AND lower(invited_email) = lower($2)
+           AND status = 'pending'`,
+        [userId, String(userEmail)]
+      );
+    }
+
     const inviter = 'inviter';
     const { rows } = await pool.query(
       `SELECT
@@ -408,9 +465,11 @@ const FamilyModel = {
         fi.group_id,
         fi.inviter_user_id,
         fi.invited_user_id,
+        fi.invited_email,
         fi.status,
         fi.created_at,
         fi.responded_at,
+        fi.expires_at,
         ${f.table}.${f.name} AS family_name,
         ${f.table}.${f.code} AS family_code,
         ${inviter}.${u.fullName} AS inviter_name
@@ -487,6 +546,177 @@ const FamilyModel = {
        WHERE id::text = $1 AND invited_user_id::text = $2 AND status = 'pending'
        RETURNING id, group_id, inviter_user_id, invited_user_id, status, created_at, responded_at`,
       [String(invitationId), String(userId)]
+    );
+
+    return normalizeInvitation(rows[0]);
+  },
+
+  async createEmailInvitation({ familyId, inviterUserId, email }) {
+    await ensureSchema();
+    await expirePendingInvitations();
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const targetUser = await this.findUserByEmail(normalizedEmail);
+    if (targetUser) {
+      const isMember = await this.isMember(targetUser.user_id, familyId);
+      if (isMember) return { status: 'already_member', invitation: null };
+    }
+
+    const { rows: existingRows } = await pool.query(
+      `SELECT id, group_id, inviter_user_id, invited_user_id, invited_email, status, created_at, responded_at, expires_at
+       FROM ${invitationTable}
+       WHERE group_id::text = $1 AND status = 'pending'
+         AND (lower(invited_email) = $2 OR invited_user_id::text = $3)
+       LIMIT 1`,
+      [String(familyId), normalizedEmail, targetUser ? String(targetUser.user_id) : '']
+    );
+    if (existingRows[0]) {
+      return { status: 'already_invited', invitation: normalizeInvitation(existingRows[0]) };
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+    const { rows } = await pool.query(
+      `INSERT INTO ${invitationTable} (group_id, inviter_user_id, invited_user_id, invited_email, token_hash, expires_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+       RETURNING id, group_id, inviter_user_id, invited_user_id, invited_email, status, created_at, responded_at, expires_at`,
+      [familyId, inviterUserId, targetUser ? targetUser.user_id : null, normalizedEmail, tokenHash, expiresAt]
+    );
+
+    return { status: 'created', invitation: normalizeInvitation(rows[0]), rawToken };
+  },
+
+  async findInvitationByToken(rawToken) {
+    await ensureSchema();
+    await expirePendingInvitations();
+    const tokenHash = hashToken(String(rawToken));
+    const inviter = 'inviter';
+
+    const { rows } = await pool.query(
+      `SELECT
+        fi.id,
+        fi.group_id,
+        fi.inviter_user_id,
+        fi.invited_user_id,
+        fi.invited_email,
+        fi.status,
+        fi.created_at,
+        fi.responded_at,
+        fi.expires_at,
+        ${f.table}.${f.name} AS family_name,
+        ${f.table}.${f.code} AS family_code,
+        ${inviter}.${u.fullName} AS inviter_name
+       FROM ${invitationTable} fi
+       JOIN ${f.table} ON ${f.table}.${f.id} = fi.group_id
+       JOIN ${u.table} ${inviter} ON ${inviter}.${u.id} = fi.inviter_user_id
+       WHERE fi.token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    return normalizeInvitation(rows[0]);
+  },
+
+  async acceptInvitationByToken(rawToken, userId, userEmail) {
+    await ensureSchema();
+    await expirePendingInvitations();
+    const tokenHash = hashToken(String(rawToken));
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `SELECT id, group_id, inviter_user_id, invited_user_id, invited_email, status, expires_at
+         FROM ${invitationTable}
+         WHERE token_hash = $1
+         FOR UPDATE`,
+        [tokenHash]
+      );
+      const invitation = rows[0];
+      if (!invitation) {
+        await client.query('ROLLBACK');
+        return { status: 'not_found', family: null };
+      }
+      if (invitation.status !== 'pending') {
+        await client.query('ROLLBACK');
+        return { status: invitation.status === 'expired' ? 'expired' : 'not_pending', family: null };
+      }
+      if (String(invitation.invited_email || '').toLowerCase() !== String(userEmail || '').toLowerCase()) {
+        await client.query('ROLLBACK');
+        return { status: 'email_mismatch', family: null };
+      }
+
+      if (!invitation.invited_user_id) {
+        await client.query(
+          `UPDATE ${invitationTable} SET invited_user_id = $1 WHERE id = $2`,
+          [userId, invitation.id]
+        );
+      }
+
+      await client.query(
+        `DELETE FROM ${m.table}
+         WHERE ${m.userId}::text = $1`,
+        [String(userId)]
+      );
+      await client.query(
+        `INSERT INTO ${m.table} (${m.familyId}, ${m.userId}, ${m.role})
+         VALUES ($1, $2, 'member')
+         ON CONFLICT (${m.familyId}, ${m.userId}) DO NOTHING`,
+        [invitation.group_id, userId]
+      );
+      await client.query(
+        `UPDATE ${invitationTable}
+         SET status = 'accepted', responded_at = NOW()
+         WHERE id = $1`,
+        [invitation.id]
+      );
+      const familyResult = await client.query(
+        `SELECT ${familySelect}
+         FROM ${f.table}
+         WHERE ${f.id} = $1
+         LIMIT 1`,
+        [invitation.group_id]
+      );
+
+      await client.query('COMMIT');
+      return { status: 'accepted', family: normalizeFamily(familyResult.rows[0]) };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('[Family] error:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async resendInvitation(invitationId, familyId) {
+    await ensureSchema();
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+    const { rows } = await pool.query(
+      `UPDATE ${invitationTable}
+       SET token_hash = $3, expires_at = $4, status = 'pending', responded_at = NULL
+       WHERE id::text = $1 AND group_id::text = $2 AND status IN ('pending', 'expired')
+       RETURNING id, group_id, inviter_user_id, invited_user_id, invited_email, status, created_at, responded_at, expires_at`,
+      [String(invitationId), String(familyId), tokenHash, expiresAt]
+    );
+
+    if (!rows[0]) return null;
+    return { invitation: normalizeInvitation(rows[0]), rawToken };
+  },
+
+  async cancelInvitation(invitationId, familyId) {
+    await ensureSchema();
+    const { rows } = await pool.query(
+      `UPDATE ${invitationTable}
+       SET status = 'cancelled', responded_at = NOW()
+       WHERE id::text = $1 AND group_id::text = $2 AND status IN ('pending', 'expired')
+       RETURNING id, group_id, inviter_user_id, invited_user_id, invited_email, status, created_at, responded_at, expires_at`,
+      [String(invitationId), String(familyId)]
     );
 
     return normalizeInvitation(rows[0]);
