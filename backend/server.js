@@ -29,7 +29,7 @@ const PORT = process.env.PORT || 3000;
 // ─── CORS ────────────────────────────────────────────────────────────────────
 // In production: restrict to whitelisted origins via CORS_ORIGINS env var.
 // In development: allow all origins for convenience.
-const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
+const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
 const allowedOrigins = CORS_ORIGINS_ENV
   ? CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)
   : [];

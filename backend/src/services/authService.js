@@ -12,7 +12,7 @@ const DEFAULT_ACCESS_EXPIRES_IN = '15m';
 const DEFAULT_REFRESH_EXPIRES_IN = '7d';
 const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.MAX_FAILED_LOGIN_ATTEMPTS || 5);
 const PASSWORD_RESET_TOKEN_TTL_MS = Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES || 60) * 60 * 1000;
-const FRONTEND_USER_URL = process.env.FRONTEND_USER_URL || 'https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app';
+const FRONTEND_USER_URL = process.env.FRONTEND_USER_URL || 'https://convenient-grocery-shopping-system.vercel.app';
 const u = authSchema.user;
 
 function hashToken(token) {
