@@ -1,6 +1,7 @@
-﻿import { AlertTriangle, CheckCircle2, Clock, Search } from "lucide-react";
+﻿import { AlertTriangle, CheckCircle2, Clock, Flame, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMealPlanStore } from "@/modules/meal-plan/store/mealPlanStore";
+import { useRecipeStore } from "@/modules/recipe/store/recipeStore";
 import type { RecipeDetail } from "@/modules/recipe/api/recipeApi";
 import { Input } from "@/components/ui/input";
 
@@ -14,6 +15,7 @@ type Filter = (typeof FILTERS)[number];
 
 export function RecipePicker({ onSelect, disabled = false }: { onSelect: (recipe: RecipeDetail) => void; disabled?: boolean }) {
   const { recipes, suggestions } = useMealPlanStore();
+  const popular = useRecipeStore((s) => s.popular);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("Tất cả");
 
@@ -37,6 +39,41 @@ export function RecipePicker({ onSelect, disabled = false }: { onSelect: (recipe
 
   return (
     <div className="flex flex-col gap-3">
+      {popular.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center gap-1.5">
+            <Flame className="h-3.5 w-3.5 text-orange-500" />
+            <span className="text-xs font-bold text-gray-600">Hay nấu</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {popular.map((recipe) => (
+              <button
+                key={recipe.recipe_id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect(recipe)}
+                className="group flex w-24 flex-shrink-0 flex-col overflow-hidden rounded-xl border bg-white text-left transition hover:border-[#7655aa] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <img
+                  src={recipe.image_url || ""}
+                  alt={recipe.recipe_name}
+                  className="h-16 w-full object-cover"
+                  onError={(e) => handleImgError(e, recipe.recipe_name)}
+                />
+                <div className="p-1.5">
+                  <p className="line-clamp-2 text-[10px] font-semibold leading-tight text-[#3d3051] group-hover:text-[#7655aa]">
+                    {recipe.recipe_name}
+                  </p>
+                  {(recipe.cook_count ?? 0) > 0 && (
+                    <p className="mt-0.5 text-[9px] text-orange-500">{recipe.cook_count}x</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9188a1]" />
         <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm công thức..." className="pl-9" />
