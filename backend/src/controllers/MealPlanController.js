@@ -94,6 +94,28 @@ class MealPlanController {
       return res.status(400).json({ success: false, message: error.message || 'Cannot replace meal plan item' });
     }
   }
+
+  static async cook(req, res) {
+    try {
+      const { userId } = getContext(req);
+      const { meal_date, meal_type, recipe_id, is_cooked = true } = req.body;
+      if (!userId || !meal_date || !meal_type || !recipe_id) {
+        return res.status(400).json({ success: false, message: 'Missing fields for mark-cooked' });
+      }
+
+      await MealPlanModel.markCooked({
+        userId,
+        mealDate: meal_date,
+        mealType: meal_type,
+        recipeId: recipe_id,
+        isCooked: is_cooked,
+      });
+      return res.status(200).json({ success: true, data: null, message: is_cooked ? 'Đã đánh dấu đã nấu' : 'Đã bỏ đánh dấu đã nấu' });
+    } catch (error) {
+      console.error('[MealPlanController.cook]', error);
+      return res.status(400).json({ success: false, message: error.message || 'Cannot update cooked status' });
+    }
+  }
 }
 
 module.exports = MealPlanController;

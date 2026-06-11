@@ -52,11 +52,15 @@ function groupMeals(rows: MealPlan[]): MealPlanGroup[] {
 
         recipe_ids: [],
 
+        cooked_recipe_ids: [],
+
       });
 
     }
 
     map.get(key)!.recipe_ids.push(row.recipe_id);
+
+    if (row.is_cooked) map.get(key)!.cooked_recipe_ids!.push(row.recipe_id);
 
   });
 
@@ -235,6 +239,38 @@ export const mealApi = {
     await this.remove(family_id, meal_date, meal_type, old_recipe_id);
 
     await this.add(family_id, meal_date, meal_type, new_recipe_id);
+
+  },
+
+
+
+  async markCooked(family_id: string, meal_date: string, meal_type: MealPlan["meal_type"], recipe_id: string, is_cooked: boolean) {
+
+    if (useMealBackend) {
+
+      unwrapApiData(
+
+        await apiClient.patch("/meal-plans/cook", {
+
+          familyGroupId: family_id,
+
+          meal_date,
+
+          meal_type,
+
+          recipe_id,
+
+          is_cooked,
+
+        }),
+
+      );
+
+      return;
+
+    }
+
+    // Mock: no-op (is_cooked not stored in mock db)
 
   },
 

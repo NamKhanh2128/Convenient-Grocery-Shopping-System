@@ -5,6 +5,11 @@ import type { RecipeDetail } from "@/modules/recipe/api/recipeApi";
 import { Input } from "@/components/ui/input";
 
 const FILTERS = ["Tất cả", "Thịt", "Rau", "Lành mạnh", "Ít tinh bột", "Nhanh"] as const;
+
+function handleImgError(e: React.SyntheticEvent<HTMLImageElement>, name?: string) {
+  const label = name ? encodeURIComponent(name.slice(0, 20)) : "Món+ăn";
+  (e.currentTarget as HTMLImageElement).src = `https://placehold.co/100x100/9B59B6/white?text=${label}`;
+}
 type Filter = (typeof FILTERS)[number];
 
 export function RecipePicker({ onSelect, disabled = false }: { onSelect: (recipe: RecipeDetail) => void; disabled?: boolean }) {
@@ -67,7 +72,12 @@ export function RecipePicker({ onSelect, disabled = false }: { onSelect: (recipe
               disabled={disabled}
               className="flex w-full items-center gap-3 rounded-xl border bg-white p-3 text-left transition hover:border-[#7655aa] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <img src={recipe.image_url} alt={recipe.recipe_name} className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+              <img
+                src={recipe.image_url || ""}
+                alt={recipe.recipe_name}
+                className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                onError={(e) => handleImgError(e, recipe.recipe_name)}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <span className="truncate font-semibold text-[#3d3051]">{recipe.recipe_name}</span>

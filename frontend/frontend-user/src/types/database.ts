@@ -366,6 +366,7 @@ export interface MealPlan {
   meal_date: string;
   meal_type: MealType;
   recipe_id: string;
+  is_cooked?: boolean;
 }
 
 /**
@@ -376,6 +377,7 @@ export interface MealPlanGroup {
   meal_date: string;
   meal_type: MealType;
   recipe_ids: string[];
+  cooked_recipe_ids?: string[];
 }
 
 /**

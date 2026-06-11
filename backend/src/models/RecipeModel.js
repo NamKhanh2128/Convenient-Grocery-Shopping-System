@@ -24,7 +24,7 @@ function mapRecipe(row, ingredients = []) {
     khau_phan: Number(row.servings || 4),
     calories: null,
     do_kho: 'Trung bình',
-    hinh_anh_url: '',
+    hinh_anh_url: row.image_url || '',
     loai_quyen: row.is_public ? 'SYSTEM' : 'PRIVATE',
     danh_muc: null,
     nguoi_tao_id: row.created_by ? String(row.created_by) : null,

@@ -9,5 +9,6 @@ router.get('/', MealPlanController.list);
 router.post('/', MealPlanController.add);
 router.delete('/', MealPlanController.remove);
 router.patch('/replace', MealPlanController.replace);
+router.patch('/cook', MealPlanController.cook);
 
 module.exports = router;

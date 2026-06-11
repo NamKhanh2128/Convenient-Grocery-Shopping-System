@@ -1,4 +1,4 @@
-﻿import { Plus, Star } from "lucide-react";
+﻿import { CheckCircle2, Plus, Star } from "lucide-react";
 import type { MealSlot } from "@/modules/meal-plan/store/mealPlanStore";
 import { useMealPlanStore } from "@/modules/meal-plan/store/mealPlanStore";
 
@@ -21,6 +21,7 @@ const DAY_NAMES = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 export function MealPlanDayCell({ date, dayIndex }: { date: string; dayIndex: number }) {
   const openEdit = useMealPlanStore((s) => s.openEdit);
   const getSlotRecipes = useMealPlanStore((s) => s.getSlotRecipes);
+  const isRecipeCooked = useMealPlanStore((s) => s.isRecipeCooked);
   const groups = useMealPlanStore((s) => s.groups);
   const today = new Date().toISOString().slice(0, 10);
   const isToday = date === today;
@@ -41,18 +42,20 @@ export function MealPlanDayCell({ date, dayIndex }: { date: string; dayIndex: nu
           const count = slotRecipes.length;
           const hasFavorite = slotRecipes.some((r) => r.is_favorite);
           const hasFrequent = slotRecipes.some((r) => recipeUsageCount(r.recipe_id) >= 2);
+          const allCooked = count > 0 && slotRecipes.every((r) => isRecipeCooked(date, slot, r.recipe_id));
           return (
             <button
               key={slot}
               onClick={() => openEdit(date, slot)}
-              className={`flex min-h-[44px] w-full items-start gap-1.5 rounded-lg border px-2 py-1.5 text-left transition hover:opacity-80 ${slotColors[slot]}`}
+              className={`flex min-h-[44px] w-full items-start gap-1.5 rounded-lg border px-2 py-1.5 text-left transition hover:opacity-80 ${allCooked ? "border-green-300 bg-green-50 text-green-700" : slotColors[slot]}`}
             >
-              <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${slotDots[slot]}`} />
+              <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${allCooked ? "bg-green-400" : slotDots[slot]}`} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-bold uppercase tracking-wide">{slot}</span>
                   {hasFavorite && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />}
                   {hasFrequent && <span className="text-[10px]" title="Thường dùng">🔥</span>}
+                  {allCooked && <CheckCircle2 className="h-3 w-3 text-green-500" />}
                 </div>
                 {count === 0 ? (
                   <div className="flex items-center gap-0.5 text-[10px] opacity-50">
@@ -60,7 +63,7 @@ export function MealPlanDayCell({ date, dayIndex }: { date: string; dayIndex: nu
                     <span>Thêm món</span>
                   </div>
                 ) : (
-                  <div className="text-[11px] font-semibold">{count} món</div>
+                  <div className="text-[11px] font-semibold">{count} món{allCooked ? " ✓" : ""}</div>
                 )}
               </div>
             </button>

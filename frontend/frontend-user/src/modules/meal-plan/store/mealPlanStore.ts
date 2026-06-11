@@ -100,9 +100,13 @@ interface MealPlanState {
 
   replaceRecipeInSlot: (date: string, slot: MealSlot, oldRecipeId: string, newRecipeId: string) => Promise<void>;
 
+  markRecipeCooked: (date: string, slot: MealSlot, recipeId: string, isCooked: boolean) => Promise<void>;
+
   removeSuggestion: (recipeId: string) => void;
 
   getSlotRecipes: (date: string, slot: MealSlot) => RecipeDetail[];
+
+  isRecipeCooked: (date: string, slot: MealSlot, recipeId: string) => boolean;
 
   getMissingForRecipe: (recipeId: string) => RecipeSuggestion["missing"];
 
@@ -264,6 +268,43 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
 
 
+  markRecipeCooked: async (date, slot, recipeId, isCooked) => {
+
+    const { familyId } = get();
+
+    if (!familyId) return;
+
+    await mealApi.markCooked(familyId, date, slot, recipeId, isCooked);
+
+    // Optimistic update — toggle cooked_recipe_ids in local state without full reload
+    set((state) => ({
+
+      groups: state.groups.map((g) => {
+
+        if (g.meal_date !== date || g.meal_type !== slot) return g;
+
+        const cooked = g.cooked_recipe_ids ?? [];
+
+        return {
+
+          ...g,
+
+          cooked_recipe_ids: isCooked
+
+            ? [...new Set([...cooked, recipeId])]
+
+            : cooked.filter((id) => id !== recipeId),
+
+        };
+
+      }),
+
+    }));
+
+  },
+
+
+
   removeSuggestion: (recipeId) => set((state) => ({
 
     suggestions: state.suggestions.filter((suggestion) => suggestion.recipe.recipe_id !== recipeId),
@@ -281,6 +322,18 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
     if (!group) return [];
 
     return group.recipe_ids.map((id) => recipes.find((r) => r.recipe_id === id)).filter(Boolean) as RecipeDetail[];
+
+  },
+
+
+
+  isRecipeCooked: (date, slot, recipeId) => {
+
+    const { groups } = get();
+
+    const group = groups.find((g) => g.meal_date === date && g.meal_type === slot);
+
+    return Boolean(group?.cooked_recipe_ids?.includes(recipeId));
 
   },
 

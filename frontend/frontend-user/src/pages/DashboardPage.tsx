@@ -55,6 +55,12 @@ export function DashboardPage() {
   const suggestion = suggestions[0];
   const activeList = shopping.find((list) => list.status === "DRAFT") ?? shopping[0];
   const expiring = fridge.filter((item) => daysUntil(item.expiry_date) <= 4).sort((a, b) => daysUntil(a.expiry_date) - daysUntil(b.expiry_date));
+
+  function expiryLabel(days: number): string {
+    if (days < 0) return "Đã hết hạn";
+    if (days === 0) return "Hôm nay";
+    return `${days} ngày`;
+  }
   const todayMeals = meals.filter((item) => item.meal_date === todayIso());
 
   const mealCards = useMemo(() => todayMeals.map((meal) => ({
@@ -95,7 +101,7 @@ export function DashboardPage() {
                 <Metric icon={<Star />} label="ĐỘ KHÓ" value={suggestion.recipe.difficulty} green />
               </div>
               <div className="relative overflow-hidden rounded-[20px] bg-black shadow-[0_22px_45px_rgba(0,0,0,0.3)]">
-                <img className="h-[290px] w-full object-cover opacity-85" src={suggestion.recipe.image_url} alt={suggestion.recipe.recipe_name} />
+                <img className="h-[290px] w-full object-cover opacity-85" src={suggestion.recipe.image_url || ""} alt={suggestion.recipe.recipe_name} onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://placehold.co/400x300/7655AA/white?text=${encodeURIComponent(suggestion.recipe.recipe_name)}`; }} />
                 <div className="absolute right-5 top-5 text-xs font-semibold">Món ăn ngon mỗi ngày</div>
                 <div className="absolute bottom-20 left-6 text-2xl font-extrabold">{suggestion.recipe.recipe_name}</div>
                 <button type="button" onClick={() => { window.location.href = `/recipes/${suggestion.recipe.recipe_id}`; }} className="absolute bottom-8 left-6 inline-flex items-center gap-2 rounded-full bg-[#22c972] px-5 py-2 text-sm font-bold"><Play className="h-4 w-4 fill-current" /> Xem hướng dẫn</button>
@@ -112,7 +118,7 @@ export function DashboardPage() {
               {mealCards.map(({ meal, recipes: mealRecipes }) => (
                 <div key={`${meal.meal_date}-${meal.meal_type}`} className="overflow-hidden rounded-[12px] bg-white shadow-sm">
                   <div className="relative h-36">
-                    <img className="h-full w-full object-cover" src={mealRecipes[0]?.image_url} alt={mealRecipes[0]?.recipe_name} />
+                    <img className="h-full w-full object-cover" src={mealRecipes[0]?.image_url || ""} alt={mealRecipes[0]?.recipe_name} onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://placehold.co/400x300/9B59B6/white?text=${encodeURIComponent(mealRecipes[0]?.recipe_name ?? "Món ăn")}`; }} />
                     <span className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-bold">{meal.meal_type}</span>
                     <span className="absolute bottom-3 right-3 rounded-full bg-[#36c977] px-3 py-1 text-xs font-bold text-white">Kế hoạch</span>
                     <div className="absolute bottom-3 left-3 right-24 truncate font-extrabold text-white drop-shadow">{mealRecipes.map((r) => r.recipe_name).join(", ")}</div>
@@ -150,7 +156,7 @@ export function DashboardPage() {
             <section className="rounded-[20px] bg-white p-6 shadow-card">
               <div className="mb-4 flex items-center justify-between"><b className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-500" />Sắp hết hạn</b><Link to="/fridge" className="text-xs font-bold text-[#7655aa]">Mở tủ lạnh</Link></div>
               <div className="space-y-3">
-                {expiring.slice(0, 2).map((item) => <div key={item.fridge_item_id} className="flex items-center gap-3 rounded-[12px] bg-[#fff0f1] p-3"><span className="text-2xl">{item.food.icon}</span><div className="flex-1"><b>{item.food.food_name}</b><p className="text-xs text-[#9a5f66]">Hết hạn: {formatDate(item.expiry_date)}</p></div><span className="rounded-[8px] bg-[#ef3d3d] px-3 py-2 text-xs font-bold text-white">{daysUntil(item.expiry_date)} ngày</span></div>)}
+                {expiring.slice(0, 2).map((item) => { const days = daysUntil(item.expiry_date); return <div key={item.fridge_item_id} className="flex items-center gap-3 rounded-[12px] bg-[#fff0f1] p-3"><span className="text-2xl">{item.food.icon}</span><div className="flex-1"><b>{item.food.food_name}</b><p className="text-xs text-[#9a5f66]">Hết hạn: {formatDate(item.expiry_date)}</p></div><span className={`rounded-[8px] px-3 py-2 text-xs font-bold text-white ${days < 0 ? "bg-[#6b7280]" : "bg-[#ef3d3d]"}`}>{expiryLabel(days)}</span></div>; })}
               </div>
             </section>
           </aside>
