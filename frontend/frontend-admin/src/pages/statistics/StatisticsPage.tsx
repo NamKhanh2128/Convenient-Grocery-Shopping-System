@@ -27,22 +27,22 @@ import {
 export function StatisticsPage() {
   const [loading, setLoading] = useState(true);
   const [foodsData, setFoodsData] = useState<any[]>([]);
-  const [activitiesData, setActivitiesData] = useState<any[]>([]);
+  const [mealsByDayData, setMealsByDayData] = useState<any[]>([]);
   const [topRecipesData, setTopRecipesData] = useState<any[]>([]);
   const [rolesData, setRolesData] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const [foods, acts, topRecs, sum] = await Promise.all([
+        const [foods, meals, topRecs, sum] = await Promise.all([
           adminStatsApi.foodsByCategory(),
-          adminStatsApi.activityLogs(),
+          adminStatsApi.mealsByDay(),
           adminStatsApi.topRecipes(),
           adminStatsApi.summary(),
         ]);
-        
+
         setFoodsData(foods || []);
-        setActivitiesData(acts || []);
+        setMealsByDayData(meals || []);
         setTopRecipesData(topRecs || []);
         
         // Roles data
@@ -84,7 +84,7 @@ export function StatisticsPage() {
       <div className="grid gap-6 md:grid-cols-2">
 
 
-        {/* Chart 2: System Activities (LineChart) */}
+        {/* Chart 2: Meal Plan Items by Day (LineChart) */}
         <Card className="rounded-[20px] shadow-card border-border/50 bg-card overflow-hidden">
           <CardHeader className="border-b border-border/30 pb-4">
             <div className="flex items-center gap-2.5">
@@ -92,8 +92,8 @@ export function StatisticsPage() {
                 <LineIcon className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-sm font-bold">Nhật Ký Tương Tác Hệ Thống</CardTitle>
-                <CardDescription className="text-xs">Tần suất thao tác từ các hộ gia đình theo ngày</CardDescription>
+                <CardTitle className="text-sm font-bold">Bữa Ăn Theo Ngày</CardTitle>
+                <CardDescription className="text-xs">Số lượng bữa ăn được lên kế hoạch mỗi ngày (7 ngày gần nhất)</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -107,7 +107,7 @@ export function StatisticsPage() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activitiesData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <LineChart data={mealsByDayData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorActivityStats" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.8}/>

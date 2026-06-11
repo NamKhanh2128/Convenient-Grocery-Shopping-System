@@ -2,11 +2,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, LogIn, Plus, AlertCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAdminAuthStore } from "@/store/authStore";
 import { AppModal } from "@/components/shared/AppModal";
+import { GoogleIcon } from "@/components/shared/GoogleIcon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -18,12 +19,14 @@ type FormValues = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const login = useAdminAuthStore((state) => state.login);
+  const signInWithGoogleRedirect = useAdminAuthStore((state) => state.signInWithGoogleRedirect);
   const loading = useAdminAuthStore((state) => state.loading);
   const authError = useAdminAuthStore((state) => state.error);
   const t = useT();
   const remembered = useMemo(() => localStorage.getItem("nateat.remembered_email") ?? "", []);
   const [lockedOpen, setLockedOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const {
     register,
@@ -59,6 +62,17 @@ export function LoginPage() {
       } else {
         toast.error(message);
       }
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogleRedirect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Đăng nhập bằng Google thất bại.";
+      toast.error(message);
+      setGoogleLoading(false);
     }
   }
 
@@ -159,13 +173,9 @@ export function LoginPage() {
                 {t("rememberMe")}
               </label>
 
-              <button
-                type="button"
-                onClick={() => toast.info("Vui lòng liên hệ nhà phát triển hệ thống để được cấp lại quyền.")}
-                className="font-bold text-[#7655aa] transition hover:text-[#67489a]"
-              >
+              <Link to="/forgot-password" className="font-bold text-[#7655aa] transition hover:text-[#67489a]">
                 {t("forgotPassword")}
-              </button>
+              </Link>
             </div>
 
             <Button
@@ -177,6 +187,22 @@ export function LoginPage() {
               {loading ? t("loginLoading") : t("loginButton")}
             </Button>
           </form>
+
+          <div className="my-5 flex items-center gap-3 text-xs font-semibold text-[#9188a1]">
+            <div className="h-px flex-1 bg-[#e7e2f0]" />
+            {t("orContinueWith")}
+            <div className="h-px flex-1 bg-[#e7e2f0]" />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full rounded-[8px] font-bold"
+            onClick={handleGoogleLogin}
+            disabled={googleLoading}
+          >
+            <GoogleIcon className="mr-2 h-4 w-4" /> {t("continueWithGoogle")}
+          </Button>
         </div>
       </section>
 

@@ -8,24 +8,12 @@ export type SummaryData = {
   totalFamilies: number;
   totalMealPlans: number;
   activeShopping: number;
-  recentActivities: {
-    id: number;
-    family_id: string;
-    family_name: string;
-    user_id: string;
-    user_name: string;
-    user_role: string;
-    action_type: string;
-    message: string;
-    target: string | null;
-    created_at: string;
-  }[];
 };
 
 export type FamilyOverview = {
-  family_id: string;
-  family_name: string;
-  created_by: string;
+  id: number;
+  name: string;
+  created_by: number;
   creator_name: string;
   creator_email: string;
   member_count: number;
@@ -61,15 +49,5 @@ export const adminStatsApi = {
   async getFamilies(): Promise<FamilyOverview[]> {
     const res = await http.get<FamiliesResult>("/api/admin/stats/families");
     return res.data;
-  },
-
-  // Kept for backward compatibility with pages that still call activityLogs
-  async activityLogs(): Promise<{ date: string; count: number }[]> {
-    return this.mealsByDay();
-  },
-
-  // Kept for backward compatibility with dashboard shopping lists overlay
-  async getShoppingLists(): Promise<unknown[]> {
-    return [];
   },
 };

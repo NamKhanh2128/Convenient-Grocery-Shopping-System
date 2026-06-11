@@ -39,7 +39,7 @@ export function UserFormPage({ mode }: UserFormPageProps) {
     email: z.string().min(1, "Email là bắt buộc.").email("Email không hợp lệ."),
     phone: z.string().min(9, "Số điện thoại tối thiểu 9 số.").optional().or(z.literal("")),
     role: z.enum(["ADMIN", "USER"]),
-    locked: z.boolean().default(false),
+    is_locked: z.boolean().default(false),
     // Only validate password in Create Mode
     password: mode === "create" ? passwordRule : z.string().optional().or(z.literal("")),
   });
@@ -62,7 +62,7 @@ export function UserFormPage({ mode }: UserFormPageProps) {
       email: "",
       phone: "",
       role: "USER",
-      locked: false,
+      is_locked: false,
       password: "",
     },
   });
@@ -73,13 +73,13 @@ export function UserFormPage({ mode }: UserFormPageProps) {
       async function fetchUser() {
         setLoading(true);
         try {
-          const user = await adminUserApi.getById(id!);
+          const user = await adminUserApi.getById(Number(id));
           reset({
             full_name: user.full_name,
             email: user.email,
             phone: user.phone || "",
-            role: user.role,
-            locked: user.locked || false,
+            role: (user.role === "ADMIN" ? "ADMIN" : "USER") as "ADMIN" | "USER",
+            is_locked: user.is_locked ?? false,
             password: "", // Leave blank in Edit
           });
         } catch (error) {
@@ -96,7 +96,7 @@ export function UserFormPage({ mode }: UserFormPageProps) {
         email: "",
         phone: "",
         role: "USER",
-        locked: false,
+        is_locked: false,
         password: "",
       });
     }
@@ -112,7 +112,7 @@ export function UserFormPage({ mode }: UserFormPageProps) {
           email: values.email,
           phone: values.phone || undefined,
           role: values.role,
-          locked: values.locked,
+          is_locked: values.is_locked,
           password: values.password || "User@123", // fallback
         });
         toast.success("Thêm người dùng mới thành công!");
@@ -122,13 +122,9 @@ export function UserFormPage({ mode }: UserFormPageProps) {
           email: values.email,
           phone: values.phone || undefined,
           role: values.role,
-          locked: values.locked,
+          is_locked: values.is_locked,
         };
-        // Only update password if provided
-        if (values.password) {
-          updatePayload.password = values.password;
-        }
-        await adminUserApi.update(id, updatePayload);
+        await adminUserApi.update(Number(id), updatePayload);
         toast.success("Cập nhật thông tin thành công!");
       }
       navigate("/users");
@@ -271,43 +267,42 @@ export function UserFormPage({ mode }: UserFormPageProps) {
                 </Select>
               </div>
 
-              {/* Password */}
-              <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="password" className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                  <span>
-                    Mật khẩu {mode === "create" && <span className="text-destructive">*</span>}
-                  </span>
-                  {mode === "edit" && <span className="text-[10px] lowercase font-medium text-muted-foreground/70">(để trống nếu không muốn thay đổi)</span>}
-                </Label>
-                <Input
-                  id="password"
-                  type="text"
-                  placeholder={mode === "create" ? "Nhập mật khẩu..." : "Nhập mật khẩu mới nếu muốn đổi..."}
-                  {...register("password")}
-                  className={cn(
-                    "h-10 rounded-[8px] font-sans",
-                    errors.password && "border-destructive focus-visible:ring-destructive"
+              {/* Password (create only — use the dedicated reset-password action to change an existing user's password) */}
+              {mode === "create" && (
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="password" className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                    <span>
+                      Mật khẩu <span className="text-destructive">*</span>
+                    </span>
+                  </Label>
+                  <Input
+                    id="password"
+                    type="text"
+                    placeholder="Nhập mật khẩu..."
+                    {...register("password")}
+                    className={cn(
+                      "h-10 rounded-[8px] font-sans",
+                      errors.password && "border-destructive focus-visible:ring-destructive"
+                    )}
+                  />
+                  {errors.password && (
+                    <p className="text-xs font-bold text-destructive mt-1.5">{errors.password.message}</p>
                   )}
-                />
-                {errors.password && (
-                  <p className="text-xs font-bold text-destructive mt-1.5">{errors.password.message}</p>
-                )}
-                {mode === "create" && (
                   <p className="text-[10px] font-medium text-muted-foreground leading-relaxed bg-muted/30 p-2.5 rounded-lg border border-border/30">
                     ⚠️ <strong>Yêu cầu bảo mật:</strong> Tối thiểu 8 ký tự, chứa ít nhất 1 chữ viết hoa và 1 chữ số.
                   </p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Status locked */}
             <div className="flex items-center gap-2.5 py-2 border-t border-border/40">
               <Checkbox
-                id="locked"
-                checked={watch("locked")}
-                onCheckedChange={(checked) => setValue("locked", Boolean(checked), { shouldValidate: true })}
+                id="is_locked"
+                checked={watch("is_locked")}
+                onCheckedChange={(checked) => setValue("is_locked", Boolean(checked), { shouldValidate: true })}
               />
-              <Label htmlFor="locked" className="text-xs font-bold text-destructive cursor-pointer select-none">
+              <Label htmlFor="is_locked" className="text-xs font-bold text-destructive cursor-pointer select-none">
                 KHÓA TÀI KHOẢN NÀY
               </Label>
             </div>

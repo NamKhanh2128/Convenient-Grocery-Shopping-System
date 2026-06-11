@@ -4,7 +4,7 @@ class AdminFoodModel {
   /**
    * List all foods (catalog) with category and unit resolved.
    */
-  static async list({ search = null, category = null } = {}) {
+  static async list({ search = null, category_id = null } = {}) {
     const params = [];
     const conditions = [];
 
@@ -12,20 +12,25 @@ class AdminFoodModel {
       params.push(`%${search}%`);
       conditions.push(`f.food_name ILIKE $${params.length}`);
     }
-    if (category) {
-      params.push(category);
-      conditions.push(`COALESCE(fc.name_vi, 'Khác') = $${params.length}`);
+    if (category_id) {
+      params.push(Number(category_id));
+      conditions.push(`f.category_id = $${params.length}`);
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const { rows } = await query(
       `SELECT
-         f.id                            AS food_id,
+         f.id,
          f.food_name,
-         COALESCE(fc.name_vi, 'Khác')   AS category,
-         COALESCE(u.name,    'g')        AS unit,
-         COALESCE(f.icon,    '🍽️')      AS icon
+         f.unit_id,
+         f.category_id,
+         f.created_at,
+         COALESCE(f.icon,    '🍽️')      AS icon,
+         fc.name_vi                      AS category_name_vi,
+         fc.name_en                      AS category_name_en,
+         u.name                          AS unit_name,
+         u.symbol                        AS unit_symbol
        FROM foods f
        LEFT JOIN food_categories fc ON fc.id = f.category_id
        LEFT JOIN units            u  ON u.id  = f.unit_id
@@ -40,11 +45,16 @@ class AdminFoodModel {
   static async getById(id) {
     const { rows } = await query(
       `SELECT
-         f.id                            AS food_id,
+         f.id,
          f.food_name,
-         COALESCE(fc.name_vi, 'Khác')   AS category,
-         COALESCE(u.name,    'g')        AS unit,
-         COALESCE(f.icon,    '🍽️')      AS icon
+         f.unit_id,
+         f.category_id,
+         f.created_at,
+         COALESCE(f.icon,    '🍽️')      AS icon,
+         fc.name_vi                      AS category_name_vi,
+         fc.name_en                      AS category_name_en,
+         u.name                          AS unit_name,
+         u.symbol                        AS unit_symbol
        FROM foods f
        LEFT JOIN food_categories fc ON fc.id = f.category_id
        LEFT JOIN units            u  ON u.id  = f.unit_id
@@ -54,49 +64,25 @@ class AdminFoodModel {
     return rows[0] ? AdminFoodModel._map(rows[0]) : null;
   }
 
-  /**
-   * Resolve category_id from name_vi.
-   */
-  static async _resolveCategoryId(category) {
-    if (!category) return null;
-    const { rows } = await query(`SELECT id FROM food_categories WHERE name_vi = $1`, [category]);
-    return rows[0]?.id || null;
-  }
-
-  /**
-   * Resolve unit_id from symbol or name.
-   */
-  static async _resolveUnitId(unit) {
-    if (!unit) return null;
-    const { rows } = await query(`SELECT id FROM units WHERE symbol = $1 OR name = $1`, [unit]);
-    return rows[0]?.id || null;
-  }
-
-  static async create({ food_name, category, unit, icon }) {
+  static async create({ food_name, category_id, unit_id, icon }) {
     // Uniqueness check
     const existing = await query(`SELECT id FROM foods WHERE food_name ILIKE $1`, [food_name.trim()]);
     if (existing.rows.length > 0) throw new Error('Tên thực phẩm đã tồn tại trong hệ thống.');
 
-    const category_id = await AdminFoodModel._resolveCategoryId(category);
-    const unit_id = await AdminFoodModel._resolveUnitId(unit);
-
     const { rows } = await query(
       `INSERT INTO foods (food_name, category_id, unit_id, icon)
        VALUES ($1, $2, $3, $4)
-       RETURNING id AS food_id`,
-      [food_name.trim(), category_id, unit_id, icon || '🍽️']
+       RETURNING id`,
+      [food_name.trim(), Number(category_id), Number(unit_id), icon || '🍽️']
     );
-    return AdminFoodModel.getById(rows[0].food_id);
+    return AdminFoodModel.getById(rows[0].id);
   }
 
-  static async update(id, { food_name, category, unit, icon }) {
+  static async update(id, { food_name, category_id, unit_id, icon }) {
     if (food_name) {
       const existing = await query(`SELECT id FROM foods WHERE food_name ILIKE $1 AND id != $2`, [food_name.trim(), id]);
       if (existing.rows.length > 0) throw new Error('Tên thực phẩm đã tồn tại trong hệ thống.');
     }
-
-    const category_id = category ? await AdminFoodModel._resolveCategoryId(category) : undefined;
-    const unit_id = unit ? await AdminFoodModel._resolveUnitId(unit) : undefined;
 
     await query(
       `UPDATE foods SET
@@ -105,7 +91,13 @@ class AdminFoodModel {
          unit_id     = COALESCE($3, unit_id),
          icon        = COALESCE($4, icon)
        WHERE id = $5`,
-      [food_name ? food_name.trim() : null, category_id ?? null, unit_id ?? null, icon || null, id]
+      [
+        food_name ? food_name.trim() : null,
+        category_id !== undefined && category_id !== null ? Number(category_id) : null,
+        unit_id !== undefined && unit_id !== null ? Number(unit_id) : null,
+        icon || null,
+        id
+      ]
     );
     return AdminFoodModel.getById(id);
   }
@@ -120,12 +112,18 @@ class AdminFoodModel {
   }
 
   static _map(row) {
+    if (!row) return null;
     return {
-      food_id: String(row.food_id),
+      id: Number(row.id),
       food_name: row.food_name,
-      category: row.category,
-      unit: row.unit,
+      unit_id: row.unit_id ? Number(row.unit_id) : null,
+      category_id: row.category_id ? Number(row.category_id) : null,
       icon: row.icon,
+      created_at: row.created_at,
+      category_name_vi: row.category_name_vi ?? null,
+      category_name_en: row.category_name_en ?? null,
+      unit_name: row.unit_name ?? null,
+      unit_symbol: row.unit_symbol ?? null,
     };
   }
 }

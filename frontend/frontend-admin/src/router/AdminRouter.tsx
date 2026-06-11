@@ -6,6 +6,9 @@ import { AdminErrorBoundary } from "@/components/shared/AdminErrorBoundary";
 
 // Lazy-loaded pages for code splitting
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
+const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage").then((m) => ({ default: m.OAuthCallbackPage })));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const UserListPage = lazy(() => import("@/pages/users/UserListPage").then((m) => ({ default: m.UserListPage })));
 const UserFormPage = lazy(() => import("@/pages/users/UserFormPage").then((m) => ({ default: m.UserFormPage })));
@@ -13,10 +16,16 @@ const FoodListPage = lazy(() => import("@/pages/foods/FoodListPage").then((m) =>
 const FoodFormPage = lazy(() => import("@/pages/foods/FoodFormPage").then((m) => ({ default: m.FoodFormPage })));
 const RecipeListPage = lazy(() => import("@/pages/recipes/RecipeListPage").then((m) => ({ default: m.RecipeListPage })));
 const RecipeFormPage = lazy(() => import("@/pages/recipes/RecipeFormPage").then((m) => ({ default: m.RecipeFormPage })));
+const RecipeCategoryListPage = lazy(() => import("@/pages/recipe-categories/RecipeCategoryListPage").then((m) => ({ default: m.RecipeCategoryListPage })));
+const RecipeCategoryFormPage = lazy(() => import("@/pages/recipe-categories/RecipeCategoryFormPage").then((m) => ({ default: m.RecipeCategoryFormPage })));
+const ShoppingListPage = lazy(() => import("@/pages/shopping/ShoppingListPage").then((m) => ({ default: m.ShoppingListPage })));
+const ShoppingListDetailPage = lazy(() => import("@/pages/shopping/ShoppingListDetailPage").then((m) => ({ default: m.ShoppingListDetailPage })));
 const StatisticsPage = lazy(() => import("@/pages/statistics/StatisticsPage").then((m) => ({ default: m.StatisticsPage })));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const FamilyListPage = lazy(() => import("@/pages/families/FamilyListPage").then((m) => ({ default: m.FamilyListPage })));
-const ActivityLogPage = lazy(() => import("@/pages/activities/ActivityLogPage").then((m) => ({ default: m.ActivityLogPage })));
+const MealPlanListPage = lazy(() => import("@/pages/meal-plans/MealPlanListPage").then((m) => ({ default: m.MealPlanListPage })));
+const MealPlanDetailPage = lazy(() => import("@/pages/meal-plans/MealPlanDetailPage").then((m) => ({ default: m.MealPlanDetailPage })));
+const NotificationListPage = lazy(() => import("@/pages/notifications/NotificationListPage").then((m) => ({ default: m.NotificationListPage })));
 
 function PageLoader() {
   return (
@@ -78,6 +87,36 @@ export function AdminRouter() {
             <AdminErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <LoginPage />
+              </Suspense>
+            </AdminErrorBoundary>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <AdminErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <ForgotPasswordPage />
+              </Suspense>
+            </AdminErrorBoundary>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <AdminErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <ResetPasswordPage />
+              </Suspense>
+            </AdminErrorBoundary>
+          }
+        />
+        <Route
+          path="/oauth/callback"
+          element={
+            <AdminErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <OAuthCallbackPage />
               </Suspense>
             </AdminErrorBoundary>
           }
@@ -184,6 +223,89 @@ export function AdminRouter() {
               </AdminErrorBoundary>
             }
           />
+          <Route
+            path="/recipe-categories"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <RecipeCategoryListPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+          <Route
+            path="/recipe-categories/new"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <RecipeCategoryFormPage mode="create" />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+          <Route
+            path="/recipe-categories/:id"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <RecipeCategoryFormPage mode="edit" />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+
+          <Route
+            path="/shopping-lists"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <ShoppingListPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+          <Route
+            path="/shopping-lists/:id"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <ShoppingListDetailPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+
+          <Route
+            path="/meal-plans"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <MealPlanListPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+          <Route
+            path="/meal-plans/:id"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <MealPlanDetailPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <AdminErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <NotificationListPage />
+                </Suspense>
+              </AdminErrorBoundary>
+            }
+          />
 
           <Route
             path="/statistics"
@@ -216,16 +338,6 @@ export function AdminRouter() {
             }
           />
 
-          <Route
-            path="/activities"
-            element={
-              <AdminErrorBoundary>
-                <Suspense fallback={<PageLoader />}>
-                  <ActivityLogPage />
-                </Suspense>
-              </AdminErrorBoundary>
-            }
-          />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

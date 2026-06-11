@@ -1,21 +1,51 @@
 import { create } from "zustand";
-import type { User } from "@/types";
-import { db, saveDb, getSession, setSession } from "@/lib/mockDb";
+import { http } from "@/lib/httpClient";
+import { getSession, setSession } from "@/lib/mockDb";
+import { supabase } from "@/lib/supabaseClient";
 
-const ADMIN_TOKEN_PREFIX = "mock-token-";
+const REFRESH_TOKEN_KEY = "nateat.refreshToken";
+
+export type AdminUser = {
+  user_id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+};
+
+type AuthResponse = {
+  message?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: AdminUser;
+};
 
 type AdminAuthState = {
-  user: User | null;
+  user: AdminUser | null;
   loading: boolean;
   error: string | null;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  signInWithGoogleRedirect: () => Promise<void>;
+  loginWithGoogle: (supabaseAccessToken: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (payload: Pick<User, "full_name" | "email" | "phone">) => Promise<void>;
+  updateProfile: (payload: Pick<AdminUser, "full_name" | "email" | "phone">) => Promise<void>;
   changePassword: (payload: { old_password: string; new_password: string }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
 };
 
-export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
+function persistSession(accessToken: string, refreshToken: string | undefined, userId: string) {
+  setSession({ token: accessToken, user_id: userId });
+  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+function clearSession() {
+  setSession(null);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+export const useAdminAuthStore = create<AdminAuthState>((set) => ({
   user: null,
   loading: true,
   error: null,
@@ -28,16 +58,16 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
         set({ user: null, loading: false });
         return;
       }
-      const state = await db();
-      const user = state.users.find((u) => u.user_id === session.user_id);
+      const data = await http.get<{ user: AdminUser }>("/auth/me");
       // ⚠️ Must be ADMIN role
-      if (!user || user.role !== "ADMIN") {
-        setSession(null);
+      if (!data.user || data.user.role !== "ADMIN") {
+        clearSession();
         set({ user: null, loading: false });
         return;
       }
-      set({ user: { ...user, password: undefined }, loading: false });
+      set({ user: data.user, loading: false });
     } catch {
+      clearSession();
       set({ user: null, loading: false });
     }
   },
@@ -46,17 +76,36 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       if (!email || !password) throw new Error("Vui lòng nhập đầy đủ email và mật khẩu.");
-      const state = await db();
-      const user = state.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (!user) throw new Error("Email hoặc mật khẩu không đúng.");
-      const expectedPassword = user.password ?? (user.role === "ADMIN" ? "Admin@123" : "User@123");
-      if (expectedPassword !== password) throw new Error("Email hoặc mật khẩu không đúng.");
-      // ⚠️ Admin-only check
-      if (user.role !== "ADMIN") throw new Error("Tài khoản không có quyền quản trị.");
-      if (user.locked) throw new Error("Tài khoản đã bị khóa.");
-      const token = `${ADMIN_TOKEN_PREFIX}${user.user_id}`;
-      setSession({ token, user_id: user.user_id });
-      set({ user: { ...user, password: undefined }, loading: false });
+      const data = await http.post<AuthResponse>("/auth/login", { email, password });
+      if (!data.accessToken || !data.user) throw new Error(data.message || "Đăng nhập thất bại.");
+      // ⚠️ Admin-only check - real role comes from backend
+      if (data.user.role !== "ADMIN") throw new Error("Tài khoản không có quyền quản trị.");
+
+      persistSession(data.accessToken, data.refreshToken, data.user.user_id);
+      set({ user: data.user, loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Đã xảy ra lỗi.";
+      set({ error: message, loading: false });
+      throw new Error(message);
+    }
+  },
+
+  signInWithGoogleRedirect: async () => {
+    const redirectTo = `${window.location.origin}/oauth/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    if (error) throw new Error(error.message);
+  },
+
+  loginWithGoogle: async (supabaseAccessToken) => {
+    set({ loading: true, error: null });
+    try {
+      const data = await http.post<AuthResponse>("/auth/oauth/google", { supabaseAccessToken });
+      if (!data.accessToken || !data.user) throw new Error(data.message || "Đăng nhập Google thất bại.");
+      // ⚠️ Admin-only check - real role comes from backend
+      if (data.user.role !== "ADMIN") throw new Error("Tài khoản không có quyền quản trị.");
+
+      persistSession(data.accessToken, data.refreshToken, data.user.user_id);
+      set({ user: data.user, loading: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Đã xảy ra lỗi.";
       set({ error: message, loading: false });
@@ -65,35 +114,31 @@ export const useAdminAuthStore = create<AdminAuthState>((set, get) => ({
   },
 
   logout: async () => {
-    setSession(null);
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (refreshToken) {
+      await http.post("/auth/logout", { refreshToken }).catch(() => undefined);
+    }
+    clearSession();
     set({ user: null, error: null });
   },
 
   updateProfile: async (payload) => {
-    const user = get().user;
-    if (!user) throw new Error("Chưa đăng nhập.");
-    const state = await db();
-    const index = state.users.findIndex((u) => u.user_id === user.user_id);
-    if (index < 0) throw new Error("Không tìm thấy tài khoản.");
-    if (
-      state.users.some(
-        (u) => u.user_id !== user.user_id && u.email.toLowerCase() === payload.email.toLowerCase(),
-      )
-    )
-      throw new Error("Email đã tồn tại.");
-    state.users[index] = { ...state.users[index], ...payload } as User;
-    saveDb(state);
-    set({ user: { ...state.users[index], password: undefined } as User });
+    const data = await http.post<{ message: string; user: AdminUser }>("/auth/update-profile", payload);
+    set({ user: data.user });
   },
 
   changePassword: async (payload) => {
-    const user = get().user;
-    if (!user) throw new Error("Chưa đăng nhập.");
-    const state = await db();
-    const found = state.users.find((u) => u.user_id === user.user_id);
-    if (!found) throw new Error("Không tìm thấy tài khoản.");
-    if (found.password !== payload.old_password) throw new Error("Mật khẩu hiện tại không đúng.");
-    found.password = payload.new_password;
-    saveDb(state);
+    await http.post("/auth/change-password", {
+      oldPassword: payload.old_password,
+      newPassword: payload.new_password,
+    });
+  },
+
+  forgotPassword: async (email) => {
+    await http.post("/auth/forgot-password", { email });
+  },
+
+  resetPassword: async (token, newPassword) => {
+    await http.post("/auth/reset-password", { token, newPassword });
   },
 }));

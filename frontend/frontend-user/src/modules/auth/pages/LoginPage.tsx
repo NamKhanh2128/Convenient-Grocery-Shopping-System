@@ -6,7 +6,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAuthStore } from "@/modules/auth/store/authStore";
+import { authApi } from "@/modules/auth/api/authApi";
 import { AppModal } from "@/shared/components/AppModal";
+import { GoogleIcon } from "@/shared/components/GoogleIcon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,7 @@ export function LoginPage() {
   const remembered = useMemo(() => localStorage.getItem("nateat.remembered_email") ?? "", []);
   const [lockedOpen, setLockedOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { register, handleSubmit, watch, setValue, formState: { errors, isValid } } = useForm<FormValues>({
     resolver: zodResolver(loginSchema),
     mode: "onChange",
@@ -39,6 +42,17 @@ export function LoginPage() {
       const message = error instanceof Error ? error.message : "Email hoặc mật khẩu không đúng";
       if (message.toLowerCase().includes("khóa")) setLockedOpen(true);
       else toast.error("Email hoặc mật khẩu không đúng");
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    try {
+      await authApi.signInWithGoogleRedirect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Đăng nhập bằng Google thất bại.";
+      toast.error(message);
+      setGoogleLoading(false);
     }
   }
 
@@ -80,12 +94,20 @@ export function LoginPage() {
                 <Checkbox checked={watch("remember")} onCheckedChange={(checked) => setValue("remember", Boolean(checked), { shouldValidate: true })} />
                 {t("rememberMe")}
               </label>
-              <button type="button" onClick={() => toast.info("Tính năng quên mật khẩu đang được phát triển.")} className="font-bold text-[#7655aa]">{t("forgotPassword")}</button>
+              <Link to="/forgot-password" className="font-bold text-[#7655aa]">{t("forgotPassword")}</Link>
             </div>
             <Button className="h-11 w-full rounded-[8px] bg-[#7655aa] hover:bg-[#67489a]" disabled={!isValid || loading}>
               <LogIn className="mr-2 h-4 w-4" /> {loading ? t("loginLoading") : t("loginButton")}
             </Button>
           </form>
+          <div className="my-4 flex items-center gap-3 text-xs text-[#9188a1]">
+            <div className="h-px flex-1 bg-[#e7e2f0]" />
+            {t("orContinueWith")}
+            <div className="h-px flex-1 bg-[#e7e2f0]" />
+          </div>
+          <Button type="button" variant="outline" className="h-11 w-full rounded-[8px]" onClick={handleGoogleLogin} disabled={googleLoading}>
+            <GoogleIcon className="mr-2 h-4 w-4" /> {t("continueWithGoogle")}
+          </Button>
           <Button asChild variant="outline" className="mt-3 h-11 w-full rounded-[8px]">
             <Link to="/register">{t("registerLink")}</Link>
           </Button>

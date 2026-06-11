@@ -6,6 +6,9 @@ const AdminRecipeController = require('../controllers/AdminRecipeController');
 const router = express.Router();
 router.use(authRequired, adminRequired);
 
+router.get('/meta/units',      AdminRecipeController.getUnits);
+router.get('/meta/categories', AdminRecipeController.getCategories);
+
 router.get('/',             AdminRecipeController.list);
 router.get('/:id',          AdminRecipeController.getById);
 router.post('/',            AdminRecipeController.create);

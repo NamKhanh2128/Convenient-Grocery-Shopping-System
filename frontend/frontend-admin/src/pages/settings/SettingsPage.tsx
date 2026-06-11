@@ -279,7 +279,7 @@ export function SettingsPage() {
                   </div>
                   <div>
                     <CardTitle className="text-sm font-bold">Ngôn ngữ hệ thống</CardTitle>
-                    <CardDescription className="text-xs">Lựa chọn hiển thị ngôn ngữ giao diện (Bilingual vi/en).</CardDescription>
+                    <CardDescription className="text-xs">Lựa chọn hiển thị ngôn ngữ giao diện (vi/en/ja).</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -307,6 +307,20 @@ export function SettingsPage() {
                     variant={lang === "en" ? "default" : "outline"}
                     className={`rounded-lg h-9 text-xs font-bold ${lang === "en" ? "bg-[#7655aa] hover:bg-[#67489a]" : ""}`}
                     onClick={() => setLang("en")}
+                  >
+                    Kích hoạt
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between bg-muted/40 p-4 rounded-xl border border-border/30">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-foreground">Tiếng Nhật (Japanese)</div>
+                    <div className="text-[10px] font-medium text-muted-foreground">Giao diện ngôn ngữ tiếng Nhật.</div>
+                  </div>
+                  <Button
+                    variant={lang === "ja" ? "default" : "outline"}
+                    className={`rounded-lg h-9 text-xs font-bold ${lang === "ja" ? "bg-[#7655aa] hover:bg-[#67489a]" : ""}`}
+                    onClick={() => setLang("ja")}
                   >
                     Kích hoạt
                   </Button>

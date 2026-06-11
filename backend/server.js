@@ -15,10 +15,13 @@ const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
 const adminUserRoutes     = require('./src/routes/adminUserRoutes');
 const adminFoodRoutes     = require('./src/routes/adminFoodRoutes');
 const adminRecipeRoutes   = require('./src/routes/adminRecipeRoutes');
+const adminRecipeCategoryRoutes = require('./src/routes/adminRecipeCategoryRoutes');
+const adminShoppingRoutes = require('./src/routes/adminShoppingRoutes');
+const adminMealPlanRoutes = require('./src/routes/adminMealPlanRoutes');
 const adminFamilyRoutes   = require('./src/routes/adminFamilyRoutes');
 const adminStatsRoutes    = require('./src/routes/adminStatsRoutes');
-const adminActivityRoutes = require('./src/routes/adminActivityRoutes');
 const adminSettingsRoutes = require('./src/routes/adminSettingsRoutes');
+const adminNotificationRoutes = require('./src/routes/adminNotificationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,10 +42,13 @@ app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/api/admin/users',      adminUserRoutes);
 app.use('/api/admin/foods',      adminFoodRoutes);
 app.use('/api/admin/recipes',    adminRecipeRoutes);
+app.use('/api/admin/recipe-categories', adminRecipeCategoryRoutes);
+app.use('/api/admin/shopping-lists', adminShoppingRoutes);
+app.use('/api/admin/meal-plans', adminMealPlanRoutes);
 app.use('/api/admin/families',   adminFamilyRoutes);
 app.use('/api/admin/stats',      adminStatsRoutes);
-app.use('/api/admin/activities', adminActivityRoutes);
 app.use('/api/admin/settings',   adminSettingsRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
 
 // Backward-compatible route aliases used by existing frontend flows.
 app.use('/shopping-lists', shoppingRoutes);

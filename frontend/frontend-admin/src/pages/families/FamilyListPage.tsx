@@ -49,8 +49,8 @@ export function FamilyListPage() {
   const filteredFamilies = useMemo(() => {
     return families.filter((f) => {
       const matchesSearch =
-        f.family_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.family_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(f.id).toLowerCase().includes(searchQuery.toLowerCase()) ||
         (f.creator_name && f.creator_name.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesSearch;
     });
@@ -66,8 +66,8 @@ export function FamilyListPage() {
     if (!deleteTarget) return;
     setActionLoading(true);
     try {
-      await adminFamilyApi.delete(deleteTarget.family_id);
-      toast.success(`Đã xóa nhóm gia đình "${deleteTarget.family_name}" thành công!`);
+      await adminFamilyApi.delete(deleteTarget.id);
+      toast.success(`Đã xóa nhóm gia đình "${deleteTarget.name}" thành công!`);
       setDeleteTarget(null);
       await loadFamilies();
     } catch (error) {
@@ -82,7 +82,7 @@ export function FamilyListPage() {
   const columns: Column<FamilyWithMembers>[] = useMemo(
     () => [
       {
-        key: "family_name",
+        key: "name",
         header: "Tên nhóm gia đình",
         sortable: true,
         render: (row) => (
@@ -92,9 +92,9 @@ export function FamilyListPage() {
             </div>
             <div>
               <div className="font-extrabold text-sm text-foreground">
-                {row.family_name}
+                {row.name}
               </div>
-              <div className="text-xs text-muted-foreground">ID: {row.family_id}</div>
+              <div className="text-xs text-muted-foreground">ID: {row.id}</div>
             </div>
           </div>
         ),
@@ -172,7 +172,7 @@ export function FamilyListPage() {
         <DataTable
           data={paginatedFamilies}
           columns={columns}
-          getRowId={(row) => row.family_id}
+          getRowId={(row) => String(row.id)}
           loading={loading}
           emptyMessage="Không tìm thấy nhóm gia đình nào phù hợp với bộ lọc."
         />
@@ -192,7 +192,7 @@ export function FamilyListPage() {
           <DialogHeader className="mb-4">
             <DialogTitle className="text-lg font-bold text-[#5b368d] flex items-center gap-2">
               <Users className="h-5 w-5 text-[#ffb11f]" />
-              Thành viên - {viewTarget?.family_name}
+              Thành viên - {viewTarget?.name}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Danh sách chi tiết các thành viên thuộc nhóm gia đình này.
@@ -251,7 +251,7 @@ export function FamilyListPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={`Xóa nhóm gia đình "${deleteTarget?.family_name}"?`}
+        title={`Xóa nhóm gia đình "${deleteTarget?.name}"?`}
         description={
           <div className="space-y-3">
             <p>Hành động này không thể hoàn tác. Việc xóa nhóm gia đình sẽ đồng thời dọn sạch:</p>

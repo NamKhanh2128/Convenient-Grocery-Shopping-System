@@ -25,7 +25,7 @@ class AdminUserController {
 
   static async create(req, res) {
     try {
-      const { full_name, email, phone, password, role } = req.body;
+      const { full_name, email, phone, password, role, is_locked } = req.body;
       if (!full_name || !email || !password) {
         return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (full_name, email, password).' });
       }
@@ -36,7 +36,7 @@ class AdminUserController {
           message: 'Mật khẩu phải có ít nhất 8 ký tự, 1 chữ hoa và 1 chữ số.',
         });
       }
-      const user = await AdminUserModel.create({ full_name, email, phone, password, role });
+      const user = await AdminUserModel.create({ full_name, email, phone, password, role, is_locked });
       return res.status(201).json({ success: true, data: user, message: 'Tạo người dùng thành công.' });
     } catch (err) {
       console.error('[AdminUser.create]', err);
@@ -47,8 +47,8 @@ class AdminUserController {
 
   static async update(req, res) {
     try {
-      const { full_name, email, phone, role } = req.body;
-      const user = await AdminUserModel.update(req.params.id, { full_name, email, phone, role });
+      const { full_name, email, phone, role, is_locked } = req.body;
+      const user = await AdminUserModel.update(req.params.id, { full_name, email, phone, role, is_locked });
       return res.status(200).json({ success: true, data: user, message: 'Cập nhật người dùng thành công.' });
     } catch (err) {
       console.error('[AdminUser.update]', err);

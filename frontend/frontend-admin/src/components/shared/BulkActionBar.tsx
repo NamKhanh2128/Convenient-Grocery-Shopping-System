@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,9 +8,11 @@ interface BulkActionBarProps {
   onDelete: () => void;
   onClear: () => void;
   className?: string;
+  /** Optional extra action buttons rendered before the delete button */
+  extraActions?: ReactNode;
 }
 
-export function BulkActionBar({ count, onDelete, onClear, className }: BulkActionBarProps) {
+export function BulkActionBar({ count, onDelete, onClear, className, extraActions }: BulkActionBarProps) {
   return (
     // ⚠️ Slide-up animation khi appear
     <div
@@ -25,6 +28,8 @@ export function BulkActionBar({ count, onDelete, onClear, className }: BulkActio
       </span>
 
       <div className="h-5 w-px bg-white/20" />
+
+      {extraActions}
 
       <Button
         variant="destructive"

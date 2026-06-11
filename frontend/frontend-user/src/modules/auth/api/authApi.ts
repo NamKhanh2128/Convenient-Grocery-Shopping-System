@@ -1,5 +1,6 @@
 import { familyApi } from "@/modules/family/api/familyApi";
 import { endpoints } from "@/shared/constants/endpoints";
+import { supabase } from "@/shared/lib/supabaseClient";
 import type { AuthSession, User } from "@/types";
 
 function normalizeApiOrigin(value?: string) {
@@ -34,6 +35,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+function authedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  return request<T>(path, {
+    ...options,
+    headers: {
+      ...(options.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 function saveSession(accessToken: string, refreshToken?: string) {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
   if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
@@ -56,6 +68,23 @@ export const authApi = {
     saveSession(data.accessToken, data.refreshToken);
     if (payload.remember) localStorage.setItem("nateat.remembered_email", payload.email);
     else localStorage.removeItem("nateat.remembered_email");
+
+    const family = await familyApi.me().catch(() => null);
+    return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, family };
+  },
+  async signInWithGoogleRedirect() {
+    const redirectTo = `${window.location.origin}/oauth/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    if (error) throw new Error(error.message);
+  },
+  async loginWithGoogle(supabaseAccessToken: string): Promise<AuthSession> {
+    const data = await request<AuthResponse>(endpoints.auth.oauthGoogle, {
+      method: "POST",
+      body: JSON.stringify({ supabaseAccessToken }),
+    });
+
+    if (!data.accessToken || !data.user) throw new Error(data.message || "Dang nhap Google that bai.");
+    saveSession(data.accessToken, data.refreshToken);
 
     const family = await familyApi.me().catch(() => null);
     return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, family };
@@ -95,10 +124,34 @@ export const authApi = {
     }
     clearSession();
   },
-  async updateProfile(_user_id: string, _payload: Pick<User, "full_name" | "email">): Promise<User> {
-    throw new Error("Chuc nang cap nhat ho so chua duoc ket noi backend.");
+  async updateProfile(
+    _user_id: string,
+    payload: Partial<Pick<User, "full_name" | "email" | "phone" | "avatar_url">>
+  ): Promise<User> {
+    const data = await authedRequest<{ message?: string; user?: User }>(endpoints.auth.updateProfile, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    if (!data.user) throw new Error(data.message || "Cap nhat ho so that bai.");
+    return data.user;
   },
-  async changePassword(_user_id: string, _payload: { old_password: string; new_password: string }) {
-    throw new Error("Chuc nang doi mat khau chua duoc ket noi backend.");
+  async changePassword(_user_id: string, payload: { old_password: string; new_password: string }) {
+    return authedRequest<{ message: string }>(endpoints.auth.changePassword, {
+      method: "POST",
+      body: JSON.stringify({ oldPassword: payload.old_password, newPassword: payload.new_password }),
+    });
+  },
+  async forgotPassword(email: string) {
+    return request<{ message: string }>(endpoints.auth.forgotPassword, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+  async resetPassword(token: string, newPassword: string) {
+    return request<{ message: string }>(endpoints.auth.resetPassword, {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
+    });
   },
 };

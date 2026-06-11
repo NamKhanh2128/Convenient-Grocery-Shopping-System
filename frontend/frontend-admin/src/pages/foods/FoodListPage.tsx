@@ -2,8 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Edit2, Trash2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import type { Food } from "@/types";
-import { adminFoodApi } from "@/api/adminFoodApi";
+import { adminFoodApi, type FoodWithMeta } from "@/api/adminFoodApi";
 import { foodCategories } from "@/constants/options";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -18,7 +17,7 @@ export function FoodListPage() {
   const navigate = useNavigate();
 
   // States
-  const [foods, setFoods] = useState<Food[]>([]);
+  const [foods, setFoods] = useState<FoodWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
@@ -27,7 +26,7 @@ export function FoodListPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Dialog States
-  const [deleteTarget, setDeleteTarget] = useState<Food | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FoodWithMeta | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -57,7 +56,10 @@ export function FoodListPage() {
   const filteredFoods = useMemo(() => {
     return foods.filter((f) => {
       const matchesSearch = f.food_name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = filterCategory === "ALL" || f.category === filterCategory;
+      const matchesCategory =
+        filterCategory === "ALL" ||
+        f.category_name_vi === filterCategory ||
+        f.category_name_en === filterCategory;
       return matchesSearch && matchesCategory;
     });
   }, [foods, searchQuery, filterCategory]);
@@ -73,7 +75,7 @@ export function FoodListPage() {
     if (!deleteTarget) return;
     setActionLoading(true);
     try {
-      await adminFoodApi.delete(deleteTarget.food_id);
+      await adminFoodApi.delete(deleteTarget.id);
       toast.success(`Đã xóa thực phẩm ${deleteTarget.food_name} thành công!`);
       setDeleteTarget(null);
       await loadFoods();
@@ -89,7 +91,7 @@ export function FoodListPage() {
   const handleBulkDelete = async () => {
     setActionLoading(true);
     try {
-      await adminFoodApi.bulkDelete(selectedIds);
+      await adminFoodApi.bulkDelete(selectedIds.map(Number));
       toast.success(`Đã xóa thành công ${selectedIds.length} thực phẩm!`);
       setSelectedIds([]);
       setBulkDeleteOpen(false);
@@ -116,7 +118,7 @@ export function FoodListPage() {
   ];
 
   // Column definitions
-  const columns: Column<Food>[] = useMemo(
+  const columns: Column<FoodWithMeta>[] = useMemo(
     () => [
       {
         key: "icon",
@@ -135,7 +137,7 @@ export function FoodListPage() {
         render: (row) => <span className="font-bold text-sm text-foreground">{row.food_name}</span>,
       },
       {
-        key: "category",
+        key: "category_name_vi",
         header: "Danh mục",
         sortable: true,
         render: (row) => {
@@ -147,18 +149,19 @@ export function FoodListPage() {
             "Gia vị": "bg-purple-500/10 text-purple-600 border-purple-500/20",
             "Khác": "bg-slate-500/10 text-slate-600 border-slate-500/20",
           };
-          const colorClass = categoryColors[row.category] || categoryColors["Khác"]!;
+          const label = row.category_name_vi ?? "—";
+          const colorClass = categoryColors[label] ?? categoryColors["Khác"]!;
           return (
             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${colorClass}`}>
-              {row.category}
+              {label}
             </span>
           );
         },
       },
       {
-        key: "unit",
+        key: "unit_symbol",
         header: "Đơn vị đo",
-        render: (row) => <span className="font-semibold text-xs text-muted-foreground">{row.unit}</span>,
+        render: (row) => <span className="font-semibold text-xs text-muted-foreground">{row.unit_symbol ?? "—"}</span>,
       },
       {
         key: "actions",
@@ -169,7 +172,7 @@ export function FoodListPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-[#7655aa] hover:bg-[#7655aa]/15"
-              onClick={() => navigate(`/foods/${row.food_id}`)}
+              onClick={() => navigate(`/foods/${row.id}`)}
               title="Chỉnh sửa thực phẩm"
             >
               <Edit2 className="h-4 w-4" />
@@ -224,7 +227,7 @@ export function FoodListPage() {
         <DataTable
           data={paginatedFoods}
           columns={columns}
-          getRowId={(row) => row.food_id}
+          getRowId={(row) => String(row.id)}
           loading={loading}
           selectable
           selectedIds={selectedIds}

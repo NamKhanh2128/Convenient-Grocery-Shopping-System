@@ -11,70 +11,37 @@ class AdminStatsModel {
       familiesResult,
       mealPlansResult,
       activeShoppingResult,
-      activitiesResult,
     ] = await Promise.all([
       query(`SELECT COUNT(*) AS total FROM users WHERE role = 'USER' AND is_locked = FALSE`),
       query(`SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN'`),
       query(`SELECT COUNT(*) AS total FROM foods`),
       query(`SELECT COUNT(*) AS total FROM recipes WHERE is_public = TRUE`),
-
       query(`SELECT COUNT(*) AS total FROM family_groups`),
       query(`SELECT COUNT(*) AS total FROM meal_plans`),
-      query(`SELECT COUNT(*) AS total FROM shopping_lists WHERE status = 'DRAFT'`),
-      // Recent 10 activities with user & family info
-      query(`
-        SELECT
-          fa.id,
-          fa.family_id,
-          fg.name          AS family_name,
-          fa.user_id,
-          u.full_name      AS user_name,
-          u.role           AS user_role,
-          fa.action_type,
-          fa.message,
-          fa.target,
-          fa.created_at
-        FROM family_activities fa
-        LEFT JOIN family_groups fg ON fg.id = fa.family_id
-        LEFT JOIN users         u  ON u.id  = fa.user_id
-        ORDER BY fa.created_at DESC
-        LIMIT 10
-      `),
+      query(`SELECT COUNT(*) AS total FROM shopping_lists WHERE status = 'active'`),
     ]);
 
     return {
-      totalUsers:       parseInt(usersResult.rows[0]?.total, 10) || 0,
-      totalAdmins:      parseInt(adminsResult.rows[0]?.total, 10) || 0,
-      totalFoods:       parseInt(foodsResult.rows[0]?.total, 10) || 0,
-      totalRecipes:     parseInt(recipesResult.rows[0]?.total, 10) || 0,
-      totalFamilies:    parseInt(familiesResult.rows[0]?.total, 10) || 0,
-      totalMealPlans:   parseInt(mealPlansResult.rows[0]?.total, 10) || 0,
-      activeShopping:   parseInt(activeShoppingResult.rows[0]?.total, 10) || 0,
-      recentActivities: activitiesResult.rows.map(a => ({
-        id:          a.id,
-        family_id:   String(a.family_id || ''),
-        family_name: a.family_name || 'Gia đình ẩn danh',
-        user_id:     String(a.user_id || ''),
-        user_name:   a.user_name || 'Người dùng ẩn danh',
-        user_role:   a.user_role || 'USER',
-        action_type: a.action_type,
-        message:     a.message,
-        target:      a.target,
-        created_at:  a.created_at,
-      })),
+      totalUsers:     parseInt(usersResult.rows[0]?.total, 10) || 0,
+      totalAdmins:    parseInt(adminsResult.rows[0]?.total, 10) || 0,
+      totalFoods:     parseInt(foodsResult.rows[0]?.total, 10) || 0,
+      totalRecipes:   parseInt(recipesResult.rows[0]?.total, 10) || 0,
+      totalFamilies:  parseInt(familiesResult.rows[0]?.total, 10) || 0,
+      totalMealPlans: parseInt(mealPlansResult.rows[0]?.total, 10) || 0,
+      activeShopping: parseInt(activeShoppingResult.rows[0]?.total, 10) || 0,
     };
   }
 
   static async mealsByDay() {
-    // Activity count per day for last 7 days (using family_activities as proxy for system activity)
+    // Meal plan item count per day for last 7 days — uses meal_plan_items (schema table)
     const { rows } = await query(`
       SELECT
-        TO_CHAR(DATE_TRUNC('day', created_at AT TIME ZONE 'UTC'), 'DD/MM') AS date,
+        TO_CHAR(DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC'), 'DD/MM') AS date,
         COUNT(*) AS count
-      FROM family_activities
-      WHERE created_at >= NOW() - INTERVAL '7 days'
-      GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
-      ORDER BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC') ASC
+      FROM meal_plan_items
+      WHERE meal_date >= (CURRENT_DATE - INTERVAL '6 days')
+      GROUP BY DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC')
+      ORDER BY DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC') ASC
     `);
 
     // Build full 7-day series with zeros for missing days
@@ -119,8 +86,8 @@ class AdminStatsModel {
   static async getFamilies() {
     const { rows } = await query(`
       SELECT
-        fg.id                     AS family_id,
-        fg.name                   AS family_name,
+        fg.id,
+        fg.name,
         fg.created_by,
         u.full_name               AS creator_name,
         u.email                   AS creator_email,
@@ -132,9 +99,9 @@ class AdminStatsModel {
       ORDER BY fg.name
     `);
     return rows.map(r => ({
-      family_id:     String(r.family_id),
-      family_name:   r.family_name,
-      created_by:    String(r.created_by),
+      id:            Number(r.id),
+      name:          r.name,
+      created_by:    Number(r.created_by),
       creator_name:  r.creator_name || 'Ẩn danh',
       creator_email: r.creator_email || '—',
       member_count:  parseInt(r.member_count, 10) || 0,

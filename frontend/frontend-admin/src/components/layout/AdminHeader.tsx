@@ -10,9 +10,12 @@ import {
   Users2,
   UtensilsCrossed,
   BookOpen,
+  Tags,
+  ShoppingCart,
+  CalendarRange,
+  BellDot,
   BarChart3,
   Settings,
-  Activity,
   Bell,
   AlertTriangle,
   AlertCircle,
@@ -28,14 +31,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { TranslationKey } from "@/lib/i18n";
 
 const navItems: { to: string; labelKey: TranslationKey; icon: React.ElementType }[] = [
-  { to: "/dashboard", labelKey: "adminDashboard", icon: LayoutDashboard },
-  { to: "/users", labelKey: "adminUsers", icon: Users },
-  { to: "/families", labelKey: "adminFamilies", icon: Users2 },
-  { to: "/foods", labelKey: "adminFoods", icon: UtensilsCrossed },
-  { to: "/recipes", labelKey: "adminRecipes", icon: BookOpen },
-  { to: "/statistics", labelKey: "adminStatistics", icon: BarChart3 },
-  { to: "/activities", labelKey: "adminActivities", icon: Activity },
-  { to: "/settings", labelKey: "adminSettings", icon: Settings },
+  { to: "/dashboard", labelKey: "navigation.dashboard", icon: LayoutDashboard },
+  { to: "/users", labelKey: "navigation.users", icon: Users },
+  { to: "/families", labelKey: "navigation.families", icon: Users2 },
+  { to: "/foods", labelKey: "navigation.foods", icon: UtensilsCrossed },
+  { to: "/recipes", labelKey: "navigation.recipes", icon: BookOpen },
+  { to: "/recipe-categories", labelKey: "navigation.recipeCategories", icon: Tags },
+  { to: "/shopping-lists", labelKey: "navigation.shoppingLists", icon: ShoppingCart },
+  { to: "/meal-plans", labelKey: "navigation.mealPlans", icon: CalendarRange },
+  { to: "/notifications", labelKey: "navigation.notifications", icon: BellDot },
+  { to: "/statistics", labelKey: "navigation.statistics", icon: BarChart3 },
+  { to: "/settings", labelKey: "navigation.settings", icon: Settings },
 ];
 
 export function AdminHeader() {

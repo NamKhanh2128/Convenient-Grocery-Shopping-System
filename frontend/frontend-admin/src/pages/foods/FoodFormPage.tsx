@@ -5,8 +5,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Save, ArrowLeft, Loader2, Apple, Edit3 } from "lucide-react";
+import type { Unit, FoodCategory } from "@/types";
 import { adminFoodApi } from "@/api/adminFoodApi";
-import { foodCategories, foodUnits } from "@/constants/options";
+import { adminRecipeApi } from "@/api/adminRecipeApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +28,8 @@ interface FoodFormPageProps {
 
 const foodFormSchema = z.object({
   food_name: z.string().min(1, "Tên thực phẩm là bắt buộc."),
-  category: z.string().min(1, "Vui lòng chọn danh mục thực phẩm."),
-  unit: z.string().min(1, "Vui lòng chọn đơn vị tính."),
+  category_id: z.string().min(1, "Vui lòng chọn danh mục thực phẩm."),
+  unit_id: z.string().min(1, "Vui lòng chọn đơn vị tính."),
   icon: z.string().min(1, "Vui lòng cung cấp biểu tượng emoji.").emoji("Chỉ chấp nhận duy nhất 1 ký tự biểu tượng emoji."),
 });
 
@@ -39,6 +40,8 @@ export function FoodFormPage({ mode }: FoodFormPageProps) {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [categories, setCategories] = useState<FoodCategory[]>([]);
 
   const {
     register,
@@ -52,61 +55,57 @@ export function FoodFormPage({ mode }: FoodFormPageProps) {
     mode: "onChange",
     defaultValues: {
       food_name: "",
-      category: "",
-      unit: "",
+      category_id: "",
+      unit_id: "",
       icon: "🥦",
     },
   });
 
-  // Load old food if editing
+  // Load reference data & old food if editing
   useEffect(() => {
-    if (mode === "edit" && id) {
-      async function fetchFood() {
-        setLoading(true);
-        try {
-          const food = await adminFoodApi.getById(id!);
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [unitsData, categoriesData] = await Promise.all([
+          adminRecipeApi.getUnits(),
+          adminRecipeApi.getCategories(),
+        ]);
+        setUnits(unitsData);
+        setCategories(categoriesData);
+
+        if (mode === "edit" && id) {
+          const food = await adminFoodApi.getById(Number(id));
           reset({
             food_name: food.food_name,
-            category: food.category,
-            unit: food.unit,
+            category_id: food.category_id ? String(food.category_id) : "",
+            unit_id: food.unit_id ? String(food.unit_id) : "",
             icon: food.icon || "🥦",
           });
-        } catch (error) {
-          toast.error("Không thể tải thông tin thực phẩm.");
-          navigate("/foods");
-        } finally {
-          setLoading(false);
         }
+      } catch (error) {
+        toast.error("Không thể tải thông tin thực phẩm.");
+        navigate("/foods");
+      } finally {
+        setLoading(false);
       }
-      fetchFood();
-    } else {
-      reset({
-        food_name: "",
-        category: "",
-        unit: "",
-        icon: "🥦",
-      });
     }
+    loadData();
   }, [mode, id, reset, navigate]);
 
   const onSubmit = async (values: FormValues) => {
     setSaving(true);
     try {
+      const payload = {
+        food_name: values.food_name,
+        category_id: Number(values.category_id),
+        unit_id: Number(values.unit_id),
+        icon: values.icon,
+      };
       if (mode === "create") {
-        await adminFoodApi.create({
-          food_name: values.food_name,
-          category: values.category as any,
-          unit: values.unit as any,
-          icon: values.icon,
-        });
+        await adminFoodApi.create(payload);
         toast.success("Thêm thực phẩm chuẩn thành công!");
       } else if (mode === "edit" && id) {
-        await adminFoodApi.update(id, {
-          food_name: values.food_name,
-          category: values.category as any,
-          unit: values.unit as any,
-          icon: values.icon,
-        });
+        await adminFoodApi.update(Number(id), payload);
         toast.success("Cập nhật thực phẩm thành công!");
       }
       navigate("/foods");
@@ -198,22 +197,22 @@ export function FoodFormPage({ mode }: FoodFormPageProps) {
                   Danh mục phân loại <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={watch("category")}
-                  onValueChange={(val) => setValue("category", val, { shouldValidate: true })}
+                  value={watch("category_id")}
+                  onValueChange={(val) => setValue("category_id", val, { shouldValidate: true })}
                 >
-                  <SelectTrigger className={cn("h-10 rounded-[8px] border-border bg-card font-semibold text-sm", errors.category && "border-destructive focus:ring-destructive")}>
+                  <SelectTrigger className={cn("h-10 rounded-[8px] border-border bg-card font-semibold text-sm", errors.category_id && "border-destructive focus:ring-destructive")}>
                     <SelectValue placeholder="Chọn danh mục phân loại..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {foodCategories.map((c) => (
-                      <SelectItem key={c} value={c} className="font-semibold text-xs">
-                        {c}
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)} className="font-semibold text-xs">
+                        {c.name_vi}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.category && (
-                  <p className="text-xs font-bold text-destructive mt-1.5">{errors.category.message}</p>
+                {errors.category_id && (
+                  <p className="text-xs font-bold text-destructive mt-1.5">{errors.category_id.message}</p>
                 )}
               </div>
 
@@ -223,22 +222,22 @@ export function FoodFormPage({ mode }: FoodFormPageProps) {
                   Đơn vị tính chuẩn <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={watch("unit")}
-                  onValueChange={(val) => setValue("unit", val, { shouldValidate: true })}
+                  value={watch("unit_id")}
+                  onValueChange={(val) => setValue("unit_id", val, { shouldValidate: true })}
                 >
-                  <SelectTrigger className={cn("h-10 rounded-[8px] border-border bg-card font-semibold text-sm", errors.unit && "border-destructive focus:ring-destructive")}>
+                  <SelectTrigger className={cn("h-10 rounded-[8px] border-border bg-card font-semibold text-sm", errors.unit_id && "border-destructive focus:ring-destructive")}>
                     <SelectValue placeholder="Chọn đơn vị đo lường..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {foodUnits.map((u) => (
-                      <SelectItem key={u} value={u} className="font-semibold text-xs">
-                        {u}
+                    {units.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)} className="font-semibold text-xs">
+                        {u.symbol} ({u.name})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.unit && (
-                  <p className="text-xs font-bold text-destructive mt-1.5">{errors.unit.message}</p>
+                {errors.unit_id && (
+                  <p className="text-xs font-bold text-destructive mt-1.5">{errors.unit_id.message}</p>
                 )}
               </div>
 

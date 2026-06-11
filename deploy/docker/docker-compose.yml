@@ -1,0 +1,52 @@
+services:
+  # Express Backend API Service
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: nateat-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres.vzxmdvesbbjaubgasihb:10diemitssviet@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres
+      - JWT_SECRET=your-jwt-secret
+      - JWT_SECRET_ACCESS=your_access_secret
+      - JWT_SECRET_REFRESH=your_refresh_secret
+      - DB_SSL=true
+      - DB_POOL_MAX=10
+    restart: always
+
+  # React User Frontend served via Nginx
+  frontend-user:
+    build:
+      context: ../../frontend/frontend-user
+      dockerfile: Dockerfile
+      args:
+        # Connects to backend relatively via Nginx reverse proxy
+        - VITE_API_BASE_URL=/api
+        - VITE_SUPABASE_URL=https://vzxmdvesbbjaubgasihb.supabase.co
+        - VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_qT12tQD9k9GxKuFtAlJ9Pw_we4P3cfj
+    container_name: nateat-frontend-user
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: always
+
+  # React Admin Frontend served via Nginx
+  frontend-admin:
+    build:
+      context: ../../frontend/frontend-admin
+      dockerfile: Dockerfile
+      args:
+        # Connects to backend relatively via Nginx reverse proxy
+        - VITE_API_BASE_URL=/api
+        - VITE_SUPABASE_URL=https://vzxmdvesbbjaubgasihb.supabase.co
+        - VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_qT12tQD9k9GxKuFtAlJ9Pw_we4P3cfj
+    container_name: nateat-frontend-admin
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
+    restart: always

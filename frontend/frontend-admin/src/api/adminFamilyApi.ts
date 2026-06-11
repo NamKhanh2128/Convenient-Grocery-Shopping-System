@@ -1,10 +1,10 @@
 import { http } from "@/lib/httpClient";
-import type { Family } from "@/types";
+import type { FamilyGroup } from "@/types";
 
-export type FamilyWithMembers = Family & {
+export type FamilyWithMembers = FamilyGroup & {
   members: {
-    id: string;
-    user_id: string;
+    id: number;
+    user_id: number;
     full_name?: string;
     email?: string;
     role?: string;
@@ -23,12 +23,12 @@ export const adminFamilyApi = {
     return res.data.families;
   },
 
-  async getMembers(family_id: string): Promise<FamilyWithMembers["members"]> {
+  async getMembers(family_id: number): Promise<FamilyWithMembers["members"]> {
     const res = await http.get<MembersResult>(`/api/admin/families/${family_id}/members`);
     return res.data.members;
   },
 
-  async delete(family_id: string): Promise<void> {
+  async delete(family_id: number): Promise<void> {
     await http.delete(`/api/admin/families/${family_id}`);
   },
 };

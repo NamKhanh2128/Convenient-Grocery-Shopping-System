@@ -41,8 +41,8 @@ export function UserListPage() {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await adminUserApi.list();
-      setUsers(data);
+      const data = await adminUserApi.list({ limit: 1000 });
+      setUsers(data.users);
     } catch (error) {
       toast.error("Không thể tải danh sách người dùng.");
     } finally {
@@ -71,8 +71,8 @@ export function UserListPage() {
       
       const matchesStatus =
         filterStatus === "ALL" ||
-        (filterStatus === "LOCKED" && u.locked) ||
-        (filterStatus === "ACTIVE" && !u.locked);
+        (filterStatus === "LOCKED" && u.is_locked) ||
+        (filterStatus === "ACTIVE" && !u.is_locked);
 
       return matchesSearch && matchesRole && matchesStatus;
     });
@@ -87,7 +87,7 @@ export function UserListPage() {
   const handleBulkDelete = async () => {
     setActionLoading(true);
     try {
-      await adminUserApi.bulkDelete(selectedIds);
+      await adminUserApi.bulkDelete(selectedIds.map(Number));
       toast.success(`Đã xóa thành công ${selectedIds.length} người dùng!`);
       setSelectedIds([]);
       setBulkDeleteOpen(false);
@@ -105,9 +105,9 @@ export function UserListPage() {
     if (!lockTarget) return;
     setActionLoading(true);
     try {
-      await adminUserApi.toggleLock(lockTarget.user_id);
+      await adminUserApi.toggleLock(lockTarget.id);
       toast.success(
-        `${lockTarget.locked ? "Mở khóa" : "Khóa"} tài khoản ${lockTarget.full_name} thành công!`
+        `${lockTarget.is_locked ? "Mở khóa" : "Khóa"} tài khoản ${lockTarget.full_name} thành công!`
       );
       setLockTarget(null);
       await loadUsers();
@@ -124,7 +124,7 @@ export function UserListPage() {
     if (!deleteTarget) return;
     setActionLoading(true);
     try {
-      await adminUserApi.delete(deleteTarget.user_id);
+      await adminUserApi.delete(deleteTarget.id);
       toast.success(`Đã xóa tài khoản ${deleteTarget.full_name} thành công!`);
       setDeleteTarget(null);
       await loadUsers();
@@ -145,7 +145,7 @@ export function UserListPage() {
     }
     setActionLoading(true);
     try {
-      await adminUserApi.resetPassword(resetTarget.user_id, resetPasswordValue);
+      await adminUserApi.resetPassword(resetTarget.id, resetPasswordValue);
       toast.success(`Đã đặt lại mật khẩu cho ${resetTarget.full_name} thành công!`);
       setResetTarget(null);
       setResetPasswordValue("User@123");
@@ -197,7 +197,7 @@ export function UserListPage() {
             <div>
               <div className="font-bold text-sm text-foreground flex items-center gap-1.5">
                 {row.full_name}
-                {row.user_id === currentAdmin?.user_id && (
+                {row.email === currentAdmin?.email && (
                   <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-primary/10 text-primary border border-primary/20">
                     Bạn
                   </span>
@@ -239,18 +239,18 @@ export function UserListPage() {
         render: (row) => (
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-              row.locked
+              row.is_locked
                 ? "bg-rose-500/10 text-rose-600 border-rose-500/20"
                 : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
             }`}
           >
-            {!row.locked && (
+            {!row.is_locked && (
               <span className="relative flex h-1.5 w-1.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
             )}
-            {row.locked ? "Bị khóa" : "Hoạt động"}
+            {row.is_locked ? "Bị khóa" : "Hoạt động"}
           </span>
         ),
       },
@@ -258,7 +258,7 @@ export function UserListPage() {
         key: "actions",
         header: "Thao tác",
         render: (row) => {
-          const isSelf = row.user_id === currentAdmin?.user_id;
+          const isSelf = row.email === currentAdmin?.email;
 
           return (
             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -266,7 +266,7 @@ export function UserListPage() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-[#7655aa] hover:bg-[#7655aa]/15"
-                onClick={() => navigate(`/users/${row.user_id}`)}
+                onClick={() => navigate(`/users/${row.id}`)}
                 title="Chỉnh sửa"
               >
                 <Edit2 className="h-4 w-4" />
@@ -277,12 +277,12 @@ export function UserListPage() {
                 size="icon"
                 disabled={isSelf}
                 className={`h-8 w-8 ${
-                  row.locked ? "text-emerald-600 hover:bg-emerald-500/15" : "text-amber-600 hover:bg-amber-500/15"
+                  row.is_locked ? "text-emerald-600 hover:bg-emerald-500/15" : "text-amber-600 hover:bg-amber-500/15"
                 }`}
                 onClick={() => setLockTarget(row)}
-                title={row.locked ? "Mở khóa tài khoản" : "Khóa tài khoản"}
+                title={row.is_locked ? "Mở khóa tài khoản" : "Khóa tài khoản"}
               >
-                {row.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                {row.is_locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
               </Button>
 
               <Button
@@ -354,7 +354,7 @@ export function UserListPage() {
         <DataTable
           data={paginatedUsers}
           columns={columns}
-          getRowId={(row) => row.user_id}
+          getRowId={(row) => String(row.id)}
           loading={loading}
           selectable
           selectedIds={selectedIds}
@@ -386,14 +386,14 @@ export function UserListPage() {
       <ConfirmDialog
         open={Boolean(lockTarget)}
         onOpenChange={(open) => !open && setLockTarget(null)}
-        title={lockTarget?.locked ? "Mở khóa tài khoản?" : "Khóa tài khoản?"}
+        title={lockTarget?.is_locked ? "Mở khóa tài khoản?" : "Khóa tài khoản?"}
         description={
-          lockTarget?.locked
+          lockTarget?.is_locked
             ? `Tài khoản của ${lockTarget?.full_name} sẽ được kích hoạt trở lại và có thể đăng nhập bình thường.`
             : `Tài khoản của ${lockTarget?.full_name} sẽ không thể truy cập vào ứng dụng NAT-EAT nữa.`
         }
-        primaryLabel={lockTarget?.locked ? "Kích hoạt" : "Khóa tài khoản"}
-        type={lockTarget?.locked ? "confirm" : "warning"}
+        primaryLabel={lockTarget?.is_locked ? "Kích hoạt" : "Khóa tài khoản"}
+        type={lockTarget?.is_locked ? "confirm" : "warning"}
         onConfirm={handleToggleLock}
         isLoading={actionLoading}
       />

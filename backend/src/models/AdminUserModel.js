@@ -1,6 +1,8 @@
 const { query } = require('../config/db');
 const bcrypt = require('bcryptjs');
 
+const USER_COLUMNS = `id, email, full_name, phone, role, is_locked, failed_login_attempts, last_login, created_at, updated_at`;
+
 class AdminUserModel {
   /**
    * List users with optional search, role, lock filters and pagination.
@@ -36,14 +38,7 @@ class AdminUserModel {
     params.push(Number(limit));
     params.push(offset);
     const dataResult = await query(
-      `SELECT
-         u.id        AS user_id,
-         u.full_name,
-         u.email,
-         u.phone,
-         u.role,
-         u.is_locked AS locked,
-         u.created_at
+      `SELECT u.${USER_COLUMNS.split(', ').join(', u.')}
        FROM users u
        ${whereClause}
        ORDER BY u.created_at DESC
@@ -65,8 +60,7 @@ class AdminUserModel {
    */
   static async getById(id) {
     const { rows } = await query(
-      `SELECT id AS user_id, full_name, email, phone, role, is_locked AS locked, created_at
-       FROM users WHERE id = $1`,
+      `SELECT ${USER_COLUMNS} FROM users WHERE id = $1`,
       [id]
     );
     return rows[0] ? AdminUserModel._mapUser(rows[0]) : null;
@@ -75,7 +69,7 @@ class AdminUserModel {
   /**
    * Create a new user with hashed password.
    */
-  static async create({ full_name, email, phone, password, role = 'USER' }) {
+  static async create({ full_name, email, phone, password, role = 'USER', is_locked = false }) {
     // Check email uniqueness
     const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
@@ -85,17 +79,17 @@ class AdminUserModel {
     const password_hash = await bcrypt.hash(password, 10);
     const { rows } = await query(
       `INSERT INTO users (full_name, email, phone, password_hash, role, is_locked)
-       VALUES ($1, $2, $3, $4, $5, FALSE)
-       RETURNING id AS user_id, full_name, email, phone, role, is_locked AS locked, created_at`,
-      [full_name, email.toLowerCase(), phone || null, password_hash, role.toUpperCase()]
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING ${USER_COLUMNS}`,
+      [full_name, email.toLowerCase(), phone || null, password_hash, role.toUpperCase(), Boolean(is_locked)]
     );
     return AdminUserModel._mapUser(rows[0]);
   }
 
   /**
-   * Update user details (full_name, email, phone, role).
+   * Update user details (full_name, email, phone, role, is_locked).
    */
-  static async update(id, { full_name, email, phone, role }) {
+  static async update(id, { full_name, email, phone, role, is_locked }) {
     // Check email uniqueness if changing
     if (email) {
       const existing = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email.toLowerCase(), id]);
@@ -110,10 +104,18 @@ class AdminUserModel {
          email       = COALESCE($2, email),
          phone       = COALESCE($3, phone),
          role        = COALESCE($4, role),
+         is_locked   = COALESCE($5, is_locked),
          updated_at  = NOW()
-       WHERE id = $5
-       RETURNING id AS user_id, full_name, email, phone, role, is_locked AS locked, created_at`,
-      [full_name || null, email ? email.toLowerCase() : null, phone || null, role ? role.toUpperCase() : null, id]
+       WHERE id = $6
+       RETURNING ${USER_COLUMNS}`,
+      [
+        full_name || null,
+        email ? email.toLowerCase() : null,
+        phone || null,
+        role ? role.toUpperCase() : null,
+        is_locked === undefined ? null : Boolean(is_locked),
+        id,
+      ]
     );
     if (!rows[0]) throw new Error('Không tìm thấy người dùng.');
     return AdminUserModel._mapUser(rows[0]);
@@ -130,7 +132,7 @@ class AdminUserModel {
     const { rows } = await query(
       `UPDATE users SET is_locked = NOT is_locked, updated_at = NOW()
        WHERE id = $1
-       RETURNING id AS user_id, is_locked AS locked`,
+       RETURNING id, is_locked`,
       [id]
     );
     if (!rows[0]) throw new Error('Không tìm thấy người dùng.');
@@ -176,13 +178,16 @@ class AdminUserModel {
   static _mapUser(row) {
     if (!row) return null;
     return {
-      user_id: String(row.user_id),
-      full_name: row.full_name,
+      id: row.id,
       email: row.email,
-      phone: row.phone || null,
+      full_name: row.full_name,
+      phone: row.phone ?? null,
       role: row.role,
-      locked: row.locked === true || row.locked === 't',
+      is_locked: row.is_locked === true || row.is_locked === 't',
+      failed_login_attempts: row.failed_login_attempts ?? 0,
+      last_login: row.last_login,
       created_at: row.created_at,
+      updated_at: row.updated_at,
     };
   }
 }

@@ -11,8 +11,8 @@ class AdminFamilyModel {
 
     const { rows } = await query(
       `SELECT
-         fg.id                     AS family_id,
-         fg.name                   AS family_name,
+         fg.id,
+         fg.name,
          fg.created_by,
          u.full_name               AS creator_name,
          u.email                   AS creator_email,
@@ -44,8 +44,8 @@ class AdminFamilyModel {
       [familyId]
     );
     return rows.map(r => ({
-      id: String(r.id),
-      user_id: String(r.user_id),
+      id: Number(r.id),
+      user_id: Number(r.user_id),
       full_name: r.full_name,
       email: r.email,
       role: r.role,
@@ -56,9 +56,6 @@ class AdminFamilyModel {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      // Delete cascade: family_activities first
-      await client.query(`DELETE FROM family_activities WHERE family_id = $1`, [familyId]);
 
       // Get all member user_ids to delete their personal data belonging to this group
       const membersResult = await client.query(
@@ -109,9 +106,9 @@ class AdminFamilyModel {
 
   static _mapFamily(row) {
     return {
-      family_id: String(row.family_id),
-      family_name: row.family_name,
-      created_by: String(row.created_by),
+      id: Number(row.id),
+      name: row.name,
+      created_by: Number(row.created_by),
       creator_name: row.creator_name || 'Ẩn danh',
       creator_email: row.creator_email || '—',
       member_count: parseInt(row.member_count, 10) || 0,

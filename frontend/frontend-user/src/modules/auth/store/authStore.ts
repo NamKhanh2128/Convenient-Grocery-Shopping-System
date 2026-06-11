@@ -11,11 +11,14 @@ type AuthState = {
   error: string | null;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  loginWithGoogle: (supabaseAccessToken: string) => Promise<void>;
   register: (payload: { full_name: string; email: string; password: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshFamily: () => Promise<Family | null>;
-  updateProfile: (payload: Pick<User, "full_name" | "email">) => Promise<void>;
+  updateProfile: (payload: Partial<Pick<User, "full_name" | "email" | "phone" | "avatar_url">>) => Promise<void>;
   changePassword: (payload: { old_password: string; new_password: string }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -36,6 +39,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const session = await authApi.login({ email, password, remember });
+      set({ user: session.user, family: session.family, loading: false });
+    } catch (error) {
+      const message = getErrorMessage(error);
+      set({ error: message, loading: false });
+      throw new Error(message);
+    }
+  },
+  loginWithGoogle: async (supabaseAccessToken) => {
+    set({ loading: true, error: null });
+    try {
+      const session = await authApi.loginWithGoogle(supabaseAccessToken);
       set({ user: session.user, family: session.family, loading: false });
     } catch (error) {
       const message = getErrorMessage(error);
@@ -73,5 +87,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const user = get().user;
     if (!user) throw new Error("Chưa đăng nhập.");
     await authApi.changePassword(user.user_id, payload);
+  },
+  forgotPassword: async (email) => {
+    await authApi.forgotPassword(email);
+  },
+  resetPassword: async (token, newPassword) => {
+    await authApi.resetPassword(token, newPassword);
   },
 }));

@@ -25,11 +25,14 @@ class AdminRecipeController {
 
   static async create(req, res) {
     try {
-      const { recipe_name, description, image_url, time_minutes, calories, difficulty, instructions, ingredients } = req.body;
-      if (!recipe_name) {
-        return res.status(400).json({ success: false, message: 'Tên công thức là bắt buộc.' });
+      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients } = req.body;
+      if (!name_vi || !name_en) {
+        return res.status(400).json({ success: false, message: 'Tên công thức (Tiếng Việt và Tiếng Anh) là bắt buộc.' });
       }
-      const recipe = await AdminRecipeModel.create({ recipe_name, description, image_url, time_minutes, calories, difficulty, instructions, ingredients });
+      if (!instructions || (typeof instructions === 'string' && !instructions.trim())) {
+        return res.status(400).json({ success: false, message: 'Hướng dẫn thực hiện là bắt buộc.' });
+      }
+      const recipe = await AdminRecipeModel.create({ name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients });
       return res.status(201).json({ success: true, data: recipe, message: 'Tạo công thức thành công.' });
     } catch (err) {
       console.error('[AdminRecipe.create]', err);
@@ -39,12 +42,14 @@ class AdminRecipeController {
 
   static async update(req, res) {
     try {
-      const recipe = await AdminRecipeModel.update(req.params.id, req.body);
+      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients } = req.body;
+      const recipe = await AdminRecipeModel.update(req.params.id, { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients });
       if (!recipe) return res.status(404).json({ success: false, message: 'Không tìm thấy công thức.' });
       return res.status(200).json({ success: true, data: recipe, message: 'Cập nhật công thức thành công.' });
     } catch (err) {
       console.error('[AdminRecipe.update]', err);
-      return res.status(400).json({ success: false, message: err.message });
+      const status = err.message.includes('tồn tại') ? 409 : err.message.includes('tìm thấy') ? 404 : 400;
+      return res.status(status).json({ success: false, message: err.message });
     }
   }
 
@@ -69,6 +74,26 @@ class AdminRecipeController {
     } catch (err) {
       console.error('[AdminRecipe.bulkDelete]', err);
       return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  static async getUnits(req, res) {
+    try {
+      const units = await AdminRecipeModel.getUnits();
+      return res.status(200).json({ success: true, data: { units } });
+    } catch (err) {
+      console.error('[AdminRecipe.getUnits]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy danh sách đơn vị tính.' });
+    }
+  }
+
+  static async getCategories(req, res) {
+    try {
+      const categories = await AdminRecipeModel.getCategories();
+      return res.status(200).json({ success: true, data: { categories } });
+    } catch (err) {
+      console.error('[AdminRecipe.getCategories]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy danh sách danh mục.' });
     }
   }
 }

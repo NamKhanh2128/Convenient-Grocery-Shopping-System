@@ -1,17 +1,15 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   Users,
   UtensilsCrossed,
   BookOpen,
   Users2,
-  TrendingUp,
   Activity,
   Loader2,
 } from "lucide-react";
 import { adminStatsApi } from "@/api/adminStatsApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatCard } from "@/components/shared/StatCard";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -36,14 +34,13 @@ interface StatsSummary {
   totalFamilies: number;
   totalMealPlans: number;
   activeShopping: number;
-  recentActivities: any[];
 }
 
 export function DashboardPage() {
   const t = useT();
   const [summary, setSummary] = useState<StatsSummary | null>(null);
   const [foodsData, setFoodsData] = useState<any[]>([]);
-  const [activitiesData, setActivitiesData] = useState<any[]>([]);
+  const [mealsByDayData, setMealsByDayData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // States for detailed popup modals
@@ -67,14 +64,14 @@ export function DashboardPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const [sum, foods, acts] = await Promise.all([
+        const [sum, foods, meals] = await Promise.all([
           adminStatsApi.summary(),
           adminStatsApi.foodsByCategory(),
-          adminStatsApi.activityLogs(),
+          adminStatsApi.mealsByDay(),
         ]);
         setSummary(sum);
         setFoodsData(foods || []);
-        setActivitiesData(acts || []);
+        setMealsByDayData(meals || []);
       } catch (error) {
         console.error("Lỗi khi tải thống kê:", error);
       } finally {
@@ -91,70 +88,6 @@ export function DashboardPage() {
     "var(--chart-4)",
     "var(--chart-5)",
   ];
-
-  // Columns for the recent activities table
-  const columns: Column<any>[] = useMemo(
-    () => [
-      {
-        key: "user_name",
-        header: "Người dùng",
-        render: (row) => (
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center font-bold text-xs text-primary">
-              {row.user_name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div className="font-bold text-xs">{row.user_name}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {row.user_role === "ADMIN" ? "Quản trị viên" : "Thành viên"}
-              </div>
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: "action_type",
-        header: "Hành động",
-        render: (row) => {
-          const typeMap: Record<string, { label: string; color: string }> = {
-            fridge: { label: "Tủ lạnh", color: "bg-teal-500/10 text-teal-600 border-teal-500/20" },
-            shopping: { label: "Mua sắm", color: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-            meal: { label: "Thực đơn", color: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
-          };
-          const info = typeMap[row.action_type] || {
-            label: "Khác",
-            color: "bg-slate-500/10 text-slate-600 border-slate-500/20",
-          };
-          return (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${info.color}`}>
-              {info.label}
-            </span>
-          );
-        },
-      },
-      {
-        key: "message",
-        header: "Nội dung hoạt động",
-        render: (row) => <span className="text-xs font-semibold text-foreground/80">{row.message}</span>,
-      },
-      {
-        key: "created_at",
-        header: "Thời gian",
-        render: (row) => {
-          const time = new Date(row.created_at).toLocaleTimeString("vi-VN", {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          const date = new Date(row.created_at).toLocaleDateString("vi-VN", {
-            day: "2-digit",
-            month: "2-digit",
-          });
-          return <span className="text-xs font-medium text-muted-foreground">{`${time} - ${date}`}</span>;
-        },
-      },
-    ],
-    []
-  );
 
   return (
     <div className="space-y-6">
@@ -264,7 +197,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Line Chart: Family Activities */}
+        {/* Line Chart: Meal Plan Items by Day */}
         <Card className="rounded-[20px] shadow-card border-border/50 bg-card overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
@@ -272,8 +205,8 @@ export function DashboardPage() {
                 <Activity className="h-4 w-4" />
               </div>
               <div>
-                <CardTitle className="text-sm font-bold">Hoạt Động Hệ Thống</CardTitle>
-                <CardDescription className="text-xs">Tần suất thao tác từ hộ gia đình theo ngày</CardDescription>
+                <CardTitle className="text-sm font-bold">Bữa Ăn Theo Ngày</CardTitle>
+                <CardDescription className="text-xs">Số lượng bữa ăn được lên kế hoạch mỗi ngày (7 ngày gần nhất)</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -282,7 +215,7 @@ export function DashboardPage() {
               <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">Đang tải biểu đồ...</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activitiesData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <LineChart data={mealsByDayData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.8}/>
@@ -319,29 +252,6 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Activities Section */}
-      <Card className="rounded-[20px] shadow-card border-border/50 bg-card overflow-hidden">
-        <CardHeader className="border-b border-border/50 pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" /> Hoạt Động Mới Nhất
-              </CardTitle>
-              <CardDescription className="text-xs">Nhật ký 10 tương tác gần nhất từ người sử dụng app di động.</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DataTable
-            data={summary?.recentActivities ?? []}
-            columns={columns}
-            getRowId={(row) => row.id}
-            loading={loading}
-            emptyMessage="Không có hoạt động nào được ghi nhận."
-          />
-        </CardContent>
-      </Card>
-
       {/* Families Detail Dialog */}
       <Dialog open={familiesOpen} onOpenChange={setFamiliesOpen}>
         <DialogContent className="rounded-[20px] max-w-2xl bg-card border border-border/50">
@@ -372,11 +282,11 @@ export function DashboardPage() {
                   </thead>
                   <tbody>
                     {families.map((f) => (
-                      <tr key={f.family_id} className="border-b border-border/20 last:border-0 hover:bg-muted/40 transition">
-                        <td className="p-3 font-bold text-foreground">{f.family_name}</td>
-                        <td className="p-3 font-semibold text-muted-foreground">{f.creatorName}</td>
-                        <td className="p-3 font-semibold text-muted-foreground">{f.creatorEmail}</td>
-                        <td className="p-3 font-bold text-center text-primary">{f.memberCount}</td>
+                      <tr key={f.id} className="border-b border-border/20 last:border-0 hover:bg-muted/40 transition">
+                        <td className="p-3 font-bold text-foreground">{f.name}</td>
+                        <td className="p-3 font-semibold text-muted-foreground">{f.creator_name}</td>
+                        <td className="p-3 font-semibold text-muted-foreground">{f.creator_email}</td>
+                        <td className="p-3 font-bold text-center text-primary">{f.member_count}</td>
                       </tr>
                     ))}
                   </tbody>

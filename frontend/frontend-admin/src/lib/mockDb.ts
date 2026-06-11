@@ -1,35 +1,129 @@
 // COPIED AND ADAPTED from src/shared/lib/mockDb.ts
 // ⚠️ CRITICAL: DB_KEY and SESSION_KEY MUST match user frontend exactly
 // This ensures admin and user frontend share the same localStorage data
+//
+// NOTE: The types below are intentionally LOCAL to this file (prefixed `Mock*`)
+// and are NOT exported from `@/types` (frontend-admin/src/types/database.ts).
+// `database.ts` mirrors `database/supabase/database-schema.md` 1:1 for the real
+// backend admin APIs; this file is a self-contained localStorage mock layer used
+// only for the admin app's login session chrome and notification bell, and its
+// shapes intentionally do not correspond to schema tables.
 
-import type {
-  Family,
-  FamilyActivity,
-  FamilyMember,
-  Food,
-  FridgeItem,
-  MealPlan,
-  Recipe,
-  RecipeIngredient,
-  ShoppingList,
-  ShoppingListItem,
-  User,
-} from "@/types";
 import { addDaysIso, todayIso } from "@/lib/date";
 import { storage, uid, wait } from "@/lib/storage";
 
+export interface MockUser {
+  user_id: string;
+  full_name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  role: "ADMIN" | "USER";
+  locked?: boolean;
+}
+
+export interface MockFood {
+  food_id: string;
+  food_name: string;
+  category: string;
+  unit: string;
+  icon?: string;
+}
+
+export interface MockRecipe {
+  recipe_id: string;
+  recipe_name: string;
+  description: string;
+  instructions: string[];
+  time_minutes: number;
+  calories: number;
+  difficulty: string;
+  is_favorite?: boolean;
+}
+
+export interface MockRecipeIngredient {
+  id: string;
+  recipe_id: string;
+  food_id: string;
+  quantity: number;
+}
+
+export interface MockFamily {
+  family_id: string;
+  family_name: string;
+  created_by: string;
+}
+
+export interface MockFamilyMember {
+  id: string;
+  family_id: string;
+  user_id: string;
+}
+
+export interface MockShoppingList {
+  shopping_list_id: string;
+  family_id: string;
+  title: string;
+  plan_date: string;
+  status: string;
+  created_by: string;
+  list_type: string;
+  assigned_user_id?: string;
+}
+
+export interface MockShoppingListItem {
+  id: string;
+  shopping_list_id: string;
+  food_id: string;
+  quantity: number;
+  bought_status: boolean;
+  bought_quantity?: number;
+  remaining_quantity?: number;
+  item_status?: string;
+  inventory_synced_quantity?: number;
+}
+
+export interface MockFridgeItem {
+  fridge_item_id: string;
+  family_id: string;
+  food_id: string;
+  quantity: number;
+  expiry_date: string;
+  location: string;
+}
+
+export interface MockMealPlan {
+  meal_plan_id: string;
+  family_id: string;
+  meal_date: string;
+  meal_type: string;
+  recipe_id: string;
+}
+
+export interface MockFamilyActivity {
+  id: string;
+  family_id: string;
+  user_id: string;
+  action_type: "shopping" | "fridge" | "meal" | "recipe" | "family";
+  message: string;
+  created_at: string;
+  target?: string;
+  quantity?: number;
+  status?: string;
+}
+
 type Db = {
-  users: User[];
-  foods: Food[];
-  recipes: Recipe[];
-  recipe_ingredients: RecipeIngredient[];
-  families: Family[];
-  family_members: FamilyMember[];
-  shopping_lists: ShoppingList[];
-  shopping_list_items: ShoppingListItem[];
-  fridge_items: FridgeItem[];
-  meal_plans: MealPlan[];
-  family_activities: FamilyActivity[];
+  users: MockUser[];
+  foods: MockFood[];
+  recipes: MockRecipe[];
+  recipe_ingredients: MockRecipeIngredient[];
+  families: MockFamily[];
+  family_members: MockFamilyMember[];
+  shopping_lists: MockShoppingList[];
+  shopping_list_items: MockShoppingListItem[];
+  fridge_items: MockFridgeItem[];
+  meal_plans: MockMealPlan[];
+  family_activities: MockFamilyActivity[];
 };
 
 // ⚠️ MUST match user frontend exactly
@@ -41,7 +135,7 @@ const now = () => new Date().toISOString();
 function initialDb(): Db {
   const family_id = "family-1";
   const user_id = "user-1";
-  const foods: Food[] = [
+  const foods: MockFood[] = [
     { food_id: "food-beef", food_name: "Thịt bò", category: "Thịt cá", unit: "g", icon: "🥩" },
     { food_id: "food-tomato", food_name: "Cà chua", category: "Rau củ", unit: "quả", icon: "🍅" },
     { food_id: "food-onion", food_name: "Hành tây", category: "Rau củ", unit: "củ", icon: "🧅" },
@@ -181,7 +275,7 @@ export function addActivity(
   nextDb: Db,
   family_id: string,
   user_id: string,
-  action_type: FamilyActivity["action_type"],
+  action_type: MockFamilyActivity["action_type"],
   message: string,
 ) {
   nextDb.family_activities = [

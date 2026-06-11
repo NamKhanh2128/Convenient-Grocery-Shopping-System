@@ -12,7 +12,7 @@ type ListResult = {
 };
 
 type SingleResult = { success: boolean; data: User };
-type ToggleLockResult = { success: boolean; data: { user_id: string; locked: boolean }; message: string };
+type ToggleLockResult = { success: boolean; data: { id: number; is_locked: boolean }; message: string };
 
 export const adminUserApi = {
   async list(params?: {
@@ -32,8 +32,8 @@ export const adminUserApi = {
     return res.data;
   },
 
-  async getById(user_id: string): Promise<User> {
-    const res = await http.get<SingleResult>(`/api/admin/users/${user_id}`);
+  async getById(id: number): Promise<User> {
+    const res = await http.get<SingleResult>(`/api/admin/users/${id}`);
     return res.data;
   },
 
@@ -43,30 +43,31 @@ export const adminUserApi = {
     phone?: string;
     password: string;
     role?: string;
+    is_locked?: boolean;
   }): Promise<User> {
     const res = await http.post<SingleResult>("/api/admin/users", payload);
     return res.data;
   },
 
-  async update(user_id: string, payload: Partial<User>): Promise<User> {
-    const res = await http.put<SingleResult>(`/api/admin/users/${user_id}`, payload);
+  async update(id: number, payload: Partial<User>): Promise<User> {
+    const res = await http.put<SingleResult>(`/api/admin/users/${id}`, payload);
     return res.data;
   },
 
-  async toggleLock(user_id: string): Promise<{ user_id: string; locked: boolean }> {
-    const res = await http.post<ToggleLockResult>(`/api/admin/users/${user_id}/toggle-lock`);
+  async toggleLock(id: number): Promise<{ id: number; is_locked: boolean }> {
+    const res = await http.post<ToggleLockResult>(`/api/admin/users/${id}/toggle-lock`);
     return res.data;
   },
 
-  async resetPassword(user_id: string, new_password: string): Promise<void> {
-    await http.post(`/api/admin/users/${user_id}/reset-password`, { new_password });
+  async resetPassword(id: number, new_password: string): Promise<void> {
+    await http.post(`/api/admin/users/${id}/reset-password`, { new_password });
   },
 
-  async delete(user_id: string): Promise<void> {
-    await http.delete(`/api/admin/users/${user_id}`);
+  async delete(id: number): Promise<void> {
+    await http.delete(`/api/admin/users/${id}`);
   },
 
-  async bulkDelete(ids: string[]): Promise<void> {
+  async bulkDelete(ids: number[]): Promise<void> {
     await http.post("/api/admin/users/bulk-delete", { ids });
   },
 };

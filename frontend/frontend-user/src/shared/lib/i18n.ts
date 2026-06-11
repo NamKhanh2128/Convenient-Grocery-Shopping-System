@@ -23,6 +23,8 @@ export const translations = {
     forgotPassword: "Quên mật khẩu",
     noAccount: "Chưa có tài khoản?",
     registerLink: "Đăng ký",
+    orContinueWith: "Hoặc tiếp tục với",
+    continueWithGoogle: "Đăng nhập với Google",
 
     // Auth - Register
     registerTitle: "Tạo tài khoản",
@@ -141,6 +143,8 @@ export const translations = {
     forgotPassword: "Forgot password",
     noAccount: "Don't have an account?",
     registerLink: "Sign up",
+    orContinueWith: "Or continue with",
+    continueWithGoogle: "Continue with Google",
 
     // Auth - Register
     registerTitle: "Create account",
