@@ -404,6 +404,8 @@ const authService = {
       return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
     }
 
+    await ensureOAuthSchema();
+
     const normalizedEmail = String(email).trim().toLowerCase();
     const existingUser = await findUserByEmail(normalizedEmail);
     if (existingUser) {
@@ -424,6 +426,8 @@ const authService = {
     if (isBlank(email) || isBlank(password)) {
       return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
     }
+
+    await ensureOAuthSchema();
 
     const user = await findUserByEmail(String(email).trim().toLowerCase());
     if (!user) {
