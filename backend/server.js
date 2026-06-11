@@ -26,7 +26,31 @@ const adminNotificationRoutes = require('./src/routes/adminNotificationRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// ─── CORS ────────────────────────────────────────────────────────────────────
+// In production: restrict to whitelisted origins via CORS_ORIGINS env var.
+// In development: allow all origins for convenience.
+const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
+const allowedOrigins = CORS_ORIGINS_ENV
+  ? CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)
+  : [];
+
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          origin: (origin, callback) => {
+            // Allow server-to-server requests (no Origin header) and whitelisted origins
+            if (!origin || allowedOrigins.includes(origin)) {
+              callback(null, true);
+            } else {
+              callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+            }
+          },
+          credentials: true,
+        }
+      : undefined // Allows all origins in development
+  )
+);
 app.use(express.json());
 
 app.use('/auth', authRoutes);

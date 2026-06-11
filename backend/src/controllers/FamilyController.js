@@ -1,7 +1,7 @@
 const { FamilyModel } = require('../models/FamilyModel');
 const { emailService } = require('../services/emailService');
 
-const FRONTEND_USER_URL = process.env.FRONTEND_USER_URL || 'http://localhost:5173';
+const FRONTEND_USER_URL = process.env.FRONTEND_USER_URL || 'https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app';
 
 function ok(res, data, message = 'OK') {
   return res.json({ success: true, data, message });
