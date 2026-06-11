@@ -6,6 +6,38 @@ const { tables: t, columns: c } = schema;
 const STORAGE_LOCATIONS = ['Ngăn mát', 'Ngăn đá', 'Cửa tủ', 'Ngoài tủ', 'Ngăn đông', 'Kệ thường', 'Cánh tủ'];
 const DEFAULT_LOCATION = 'Ngăn mát';
 
+// The DB enforces a CHECK constraint allowing only English storage codes
+// ('freezer' | 'fridge' | 'door'), while the UI/validation use Vietnamese
+// labels. Translate at the model boundary so neither side has to change.
+const STORAGE_VN_TO_DB = {
+  'Ngăn mát': 'fridge',
+  'Ngăn đông': 'freezer',
+  'Ngăn đá': 'freezer',
+  'Kệ thường': 'door',
+  'Cửa tủ': 'door',
+  'Cánh tủ': 'door',
+  'Ngoài tủ': 'door',
+};
+const STORAGE_DB_TO_VN = {
+  fridge: 'Ngăn mát',
+  freezer: 'Ngăn đông',
+  door: 'Kệ thường',
+};
+
+function toDbStorage(value) {
+  if (!value) return STORAGE_VN_TO_DB[DEFAULT_LOCATION];
+  if (STORAGE_VN_TO_DB[value]) return STORAGE_VN_TO_DB[value];
+  if (STORAGE_DB_TO_VN[value]) return value; // already a DB code
+  return STORAGE_VN_TO_DB[DEFAULT_LOCATION];
+}
+
+function toVnStorage(value) {
+  if (!value) return DEFAULT_LOCATION;
+  if (STORAGE_DB_TO_VN[value]) return STORAGE_DB_TO_VN[value];
+  if (STORAGE_VN_TO_DB[value]) return value; // already a VN label
+  return DEFAULT_LOCATION;
+}
+
 const SORT_COLUMNS = {
   name: `fi.${c.itemName}`,
   expiryDate: `fi.${c.expiry}`,
@@ -59,7 +91,7 @@ function mapRow(row, familyKey = null) {
     unit: row.unit_symbol || row.unit_name || '',
     expiryDate: formatDate(row.expiry_date),
     category: row.category_id ? { id: String(row.category_id), name: row.category_name || null } : null,
-    storageLocation: row.storage_location || DEFAULT_LOCATION,
+    storageLocation: toVnStorage(row.storage_location),
     suggestedStorage: suggestStorageLocation(foodName, row.category_name || null),
     notes: null,
     familyGroupId: familyKey,
@@ -232,7 +264,7 @@ class FridgeItemModel {
       `INSERT INTO ${t.item} (user_id, name, quantity, unit_id, category_id, expiration_date, storage_location)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [Number(userId), row?.food_name || data.name, data.quantity, unitId, categoryId, data.expiryDate, data.storageLocation || DEFAULT_LOCATION]
+      [Number(userId), row?.food_name || data.name, data.quantity, unitId, categoryId, data.expiryDate, toDbStorage(data.storageLocation)]
     );
     return this.findById(result.rows[0].id, userId, data.familyGroupId);
   }
@@ -261,7 +293,7 @@ class FridgeItemModel {
     }
     if (data.storageLocation !== undefined) {
       fields.push(`storage_location = $${index}`);
-      params.push(data.storageLocation || DEFAULT_LOCATION);
+      params.push(toDbStorage(data.storageLocation));
       index += 1;
     }
     if (data.unit !== undefined) {
@@ -312,15 +344,16 @@ class FridgeItemModel {
     return this.findById(id, userId, familyGroupId);
   }
 
-  static async findExpiring(userId, daysAhead = 3) {
+  static async findExpiring(userId, daysAhead = 3, familyGroupId = null) {
+    const userIds = await this.getFamilyUserIds(userId, familyGroupId);
     const result = await query(
       `SELECT id, name, expiration_date AS expiry_date,
               (expiration_date - CURRENT_DATE) AS days_until_expiry
        FROM ${t.item}
-       WHERE user_id = $1 AND expiration_date <= CURRENT_DATE + $2::int
+       WHERE user_id = ANY($1::int[]) AND expiration_date <= CURRENT_DATE + $2::int
        ORDER BY expiration_date ASC
        LIMIT 50`,
-      [Number(userId), Number(daysAhead)]
+      [userIds, Number(daysAhead)]
     );
     return result.rows.map((row) => ({
       id: String(row.id),

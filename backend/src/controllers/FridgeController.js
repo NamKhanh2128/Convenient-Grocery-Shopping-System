@@ -4,8 +4,17 @@ const STORAGE_LOCATIONS = FridgeItemModel.getStorageLocations();
 
 function getUserContext(req) {
   return {
-    userId: req.user.id,
-    familyGroupId: req.user.familyGroupId || req.query.familyGroupId || req.body?.familyGroupId || null,
+    userId: req.user.id ?? req.user.user_id,
+    // `authRequired` resolves the family group and exposes it as
+    // `family_group_id` / `family_id`. Falling back to query/body keeps the
+    // explicit-override behaviour the controller already supported.
+    familyGroupId:
+      req.user.family_group_id ||
+      req.user.family_id ||
+      req.user.familyGroupId ||
+      req.query.familyGroupId ||
+      req.body?.familyGroupId ||
+      null,
   };
 }
 
@@ -250,8 +259,8 @@ class FridgeController {
 
   static async getExpiring(req, res) {
     try {
-      const { userId } = getUserContext(req);
-      const items = await FridgeItemModel.findExpiring(userId, 3);
+      const { userId, familyGroupId } = getUserContext(req);
+      const items = await FridgeItemModel.findExpiring(userId, 3, familyGroupId);
       return res.status(200).json({
         success: true,
         data: { items },

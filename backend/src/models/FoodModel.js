@@ -29,8 +29,8 @@ class FoodModel {
         COALESCE(dm.${c.categoryName}, 'Khác') AS category,
         COALESCE(dv.${c.unitName}, 'g') AS unit
       FROM ${t.food} tp
-      LEFT JOIN ${t.category} dm ON dm.${c.categoryId} = tp.${c.categoryId}
-      LEFT JOIN ${t.unit} dv ON dv.${c.unitId} = tp.${c.unitId}
+      LEFT JOIN ${t.category} dm ON dm.id = tp.${c.categoryId}
+      LEFT JOIN ${t.unit} dv ON dv.id = tp.${c.unitId}
       WHERE ($1::text IS NULL OR tp.${c.foodName} ILIKE '%' || $1 || '%')
       ORDER BY tp.${c.foodName}
       LIMIT $2

@@ -119,6 +119,11 @@ app.get('/health/db', async (_req, res) => {
 });
 
 app.get('/api/users', async (_req, res) => {
+  // Dev-only helper that dumps the user table without auth. Disabled in
+  // production to avoid leaking the full user list.
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ message: 'Not found' });
+  }
   try {
     const { rows } = await pool.query(
       'SELECT id, email, full_name, phone, role, is_locked, created_at, updated_at FROM users LIMIT 50'
