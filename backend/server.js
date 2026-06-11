@@ -27,20 +27,44 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
-// In production: restrict to whitelisted origins via CORS_ORIGINS env var.
-// In development: allow all origins for convenience.
-const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
-const allowedOrigins = CORS_ORIGINS_ENV
-  ? CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)
-  : [];
+// Supports both exact origins and regex patterns (prefix entry with 'regex:').
+// In development (CORS_ORIGINS not set): allow all origins for convenience.
+// In production: set CORS_ORIGINS env var on Railway.
+//
+// Example CORS_ORIGINS value:
+//   https://myapp.vercel.app,regex:https://myapp-.*\.vercel\.app
+const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || '';
+
+// Build two lists: exact strings and compiled RegExp patterns
+const { exactOrigins, originPatterns } = (() => {
+  if (!CORS_ORIGINS_ENV.trim()) return { exactOrigins: [], originPatterns: [] };
+  const exact = [];
+  const patterns = [];
+  // Always allow localhost in dev fallback
+  const devDefaults = ['http://localhost:5173', 'http://localhost:5174'];
+  const entries = [...devDefaults, ...CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)];
+  for (const entry of entries) {
+    if (entry.startsWith('regex:')) {
+      try { patterns.push(new RegExp(entry.slice(6))); } catch (e) { /* ignore bad regex */ }
+    } else {
+      exact.push(entry);
+    }
+  }
+  return { exactOrigins: exact, originPatterns: patterns };
+})();
+
+function isOriginAllowed(origin) {
+  if (exactOrigins.includes(origin)) return true;
+  return originPatterns.some((re) => re.test(origin));
+}
 
 app.use(
   cors(
-    allowedOrigins.length > 0
+    CORS_ORIGINS_ENV.trim()
       ? {
           origin: (origin, callback) => {
             // Allow server-to-server requests (no Origin header) and whitelisted origins
-            if (!origin || allowedOrigins.includes(origin)) {
+            if (!origin || isOriginAllowed(origin)) {
               callback(null, true);
             } else {
               callback(new Error(`CORS policy: origin ${origin} is not allowed`));
@@ -48,7 +72,7 @@ app.use(
           },
           credentials: true,
         }
-      : undefined // Allows all origins in development
+      : undefined // Allows all origins when CORS_ORIGINS is not set (local dev)
   )
 );
 app.use(express.json());
