@@ -59,8 +59,8 @@ class ShoppingModel {
               fc.name_vi AS category_name_vi, fc.name_en AS category_name_en
        FROM shopping_list_items sli
        LEFT JOIN foods f ON sli.food_id = f.id
-       LEFT JOIN units u ON sli.unit_id = u.id
-       LEFT JOIN food_categories fc ON sli.category_id = fc.id
+       LEFT JOIN units u ON COALESCE(f.unit_id, sli.unit_id) = u.id
+       LEFT JOIN food_categories fc ON COALESCE(f.category_id, sli.category_id) = fc.id
        WHERE sli.shopping_list_id = $1
        ORDER BY sli.created_at ASC`,
       [listId]
@@ -80,8 +80,8 @@ class ShoppingModel {
               fc.name_vi AS category_name_vi, fc.name_en AS category_name_en
        FROM shopping_list_items sli
        LEFT JOIN foods f ON sli.food_id = f.id
-       LEFT JOIN units u ON sli.unit_id = u.id
-       LEFT JOIN food_categories fc ON sli.category_id = fc.id
+       LEFT JOIN units u ON COALESCE(f.unit_id, sli.unit_id) = u.id
+       LEFT JOIN food_categories fc ON COALESCE(f.category_id, sli.category_id) = fc.id
        WHERE sli.shopping_list_id = ANY($1::int[])
        ORDER BY sli.shopping_list_id, sli.created_at ASC`,
       [listIds],
@@ -130,6 +130,23 @@ class ShoppingModel {
     await dbQuery(
       `DELETE FROM shopping_list_items WHERE shopping_list_id = $1 AND id IN (${placeholders})`,
       [listId, ...itemIds]
+    );
+  }
+
+  async updateItemQuantity(itemId, quantity) {
+    await dbQuery(
+      `UPDATE shopping_list_items
+       SET quantity    = $1,
+           remaining_quantity = GREATEST($1 - COALESCE(bought_quantity, 0), 0),
+           item_status = CASE
+             WHEN COALESCE(bought_quantity, 0) >= $1 THEN 'COMPLETED'
+             WHEN COALESCE(bought_quantity, 0) > 0   THEN 'PARTIAL'
+             ELSE 'PENDING'
+           END,
+           is_purchased  = (COALESCE(bought_quantity, 0) >= $1),
+           bought_status = (COALESCE(bought_quantity, 0) >= $1)
+       WHERE id = $2`,
+      [quantity, itemId]
     );
   }
 

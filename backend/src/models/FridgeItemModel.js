@@ -266,7 +266,9 @@ class FridgeItemModel {
        RETURNING id`,
       [Number(userId), row?.food_name || data.name, data.quantity, unitId, categoryId, data.expiryDate, toDbStorage(data.storageLocation)]
     );
-    return this.findById(result.rows[0].id, userId, data.familyGroupId);
+    // Query by userId only (no family scope) so the item is always found
+    // regardless of group_members consistency after insert.
+    return this.findById(result.rows[0].id, userId);
   }
 
   static async update(id, data, userId, familyGroupId = null) {

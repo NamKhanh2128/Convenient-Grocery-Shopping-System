@@ -590,6 +590,46 @@ export const shoppingApi = {
 
 
 
+  async updateItem(shopping_list_id: string, item_id: string, quantity: number, family_id?: string) {
+
+    validateQuantity(quantity);
+
+    if (useShoppingBackend && family_id) {
+
+      try {
+
+        await apiClient.patch(
+          `/shopping-lists/${shopping_list_id}/items/${item_id}`,
+          { quantity },
+          { params: { familyGroupId: family_id } },
+        );
+
+        return;
+
+      } catch (error) {
+
+        throw new Error(apiError(error));
+
+      }
+
+    }
+
+    const state = await db();
+
+    const item = state.shopping_list_items.find((row) => row.id === item_id);
+
+    if (!item) throw new Error("Không tìm thấy mặt hàng.");
+
+    item.quantity = quantity;
+
+    item.remaining_quantity = Math.max(0, quantity - (item.bought_quantity ?? 0));
+
+    saveDb(state);
+
+  },
+
+
+
   async deleteItems(shopping_list_id: string, itemIds: string[], family_id?: string) {
 
     if (!itemIds.length) throw new Error("Chưa chọn mặt hàng để xóa.");
@@ -598,7 +638,10 @@ export const shoppingApi = {
 
       try {
 
-        await apiClient.delete(`/shopping-lists/${shopping_list_id}/items`, { data: { item_ids: itemIds } });
+        await apiClient.delete(`/shopping-lists/${shopping_list_id}/items`, {
+          data: { item_ids: itemIds },
+          params: { familyGroupId: family_id },
+        });
 
         return;
 
@@ -630,7 +673,9 @@ export const shoppingApi = {
 
       try {
 
-        await apiClient.delete(`/shopping-lists/${shopping_list_id}`);
+        await apiClient.delete(`/shopping-lists/${shopping_list_id}`, {
+          params: { familyGroupId: family_id },
+        });
 
         return;
 

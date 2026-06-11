@@ -44,6 +44,8 @@ type ShoppingState = {
 
   addItem: (shopping_list_id: string, payload: ShoppingCreateItem, family_id: string) => Promise<void>;
 
+  updateItem: (shopping_list_id: string, item_id: string, quantity: number, family_id: string) => Promise<void>;
+
   deleteItems: (shopping_list_id: string, itemIds: string[], family_id: string) => Promise<void>;
 
   deleteList: (shopping_list_id: string, family_id: string) => Promise<void>;
@@ -161,6 +163,16 @@ export const useShoppingStore = create<ShoppingState>((set, get) => ({
   addItem: async (shopping_list_id, payload, family_id) => {
 
     await shoppingApi.upsertItem(shopping_list_id, payload, family_id);
+
+    await get().loadDetail(shopping_list_id, family_id);
+
+  },
+
+
+
+  updateItem: async (shopping_list_id, item_id, quantity, family_id) => {
+
+    await shoppingApi.updateItem(shopping_list_id, item_id, quantity, family_id);
 
     await get().loadDetail(shopping_list_id, family_id);
 

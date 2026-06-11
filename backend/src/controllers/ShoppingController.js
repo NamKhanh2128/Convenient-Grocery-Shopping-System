@@ -123,6 +123,23 @@ class ShoppingController {
     }
   }
 
+  async updateItem(req, res) {
+    try {
+      const familyId = await resolveFamilyId(req);
+      if (!familyId) return fail(res, 'Bạn chưa tham gia nhóm gia đình nào.', 403);
+      const result = await ShoppingService.updateItem(
+        Number(req.params.listId),
+        Number(req.params.itemId),
+        req.body,
+        familyId,
+      );
+      success(res, result);
+    } catch (err) {
+      const code = err.message.includes('quyền') ? 403 : 400;
+      fail(res, err.message, code);
+    }
+  }
+
   async deleteList(req, res) {
     try {
       const familyId = await resolveFamilyId(req);

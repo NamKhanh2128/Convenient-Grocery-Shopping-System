@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, PackageCheck, Trash2, X, Info } from "lucide-react";
+import { CheckCircle2, Circle, Info, PackageCheck, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useT } from "@/shared/store/languageStore";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -10,10 +10,11 @@ import { AppModal } from "@/shared/components/AppModal";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fridgeApi, type FridgeRow } from "@/modules/fridge/api/fridgeApi";
+import { foodApi } from "@/shared/api/foodApi";
 import { formatDate } from "@/shared/utils/date";
-import type { ShoppingListItem } from "@/types";
-import type { Food } from "@/types";
+import type { Food, ShoppingListItem } from "@/types";
 
 type DetailedItem = ShoppingListItem & { food: Food };
 
@@ -31,7 +32,9 @@ export function ShoppingDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
-  const { lists, loadDetail, recordPurchase, deleteItems, deleteList, complete } = useShoppingStore();
+  const { lists, loadDetail, recordPurchase, deleteItems, deleteList, complete, addItem, updateItem } =
+    useShoppingStore();
+
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteMode, setDeleteMode] = useState(false);
@@ -41,6 +44,18 @@ export function ShoppingDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [detailGroup, setDetailGroup] = useState<GroupedItem | null>(null);
   const [fridgeItems, setFridgeItems] = useState<FridgeRow[]>([]);
+
+  // edit item quantity
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState(1);
+
+  // add item
+  const [addOpen, setAddOpen] = useState(false);
+  const [addFoodId, setAddFoodId] = useState("");
+  const [addQuantity, setAddQuantity] = useState(1);
+  const [foods, setFoods] = useState<Food[]>([]);
+
   const t = useT();
   const list = lists.find((item) => item.shopping_list_id === id);
   const allCompleted = useMemo(
@@ -51,6 +66,7 @@ export function ShoppingDetailPage() {
   useEffect(() => {
     if (id) void loadDetail(id, family.family_id);
     void fridgeApi.list(family.family_id).then(setFridgeItems);
+    void foodApi.list().then(setFoods);
   }, [family.family_id, id, loadDetail]);
 
   const grouped: GroupedItem[] = useMemo(() => {
@@ -79,7 +95,6 @@ export function ShoppingDetailPage() {
 
   if (!list) return <ScreenHeader title="Đang tải danh sách" />;
 
-  // Derive overall status for a group
   function groupStatus(g: GroupedItem) {
     if (g.items.every((i) => i.item_status === "COMPLETED")) return "COMPLETED";
     if (g.items.some((i) => i.item_status === "PARTIAL" || i.item_status === "COMPLETED")) return "PARTIAL";
@@ -107,6 +122,12 @@ export function ShoppingDetailPage() {
     });
   }
 
+  function openEditItem(itemId: string, currentQty: number) {
+    setEditingItemId(itemId);
+    setEditQuantity(currentQty);
+    setEditOpen(true);
+  }
+
   async function confirmItem() {
     if (!checkingId || !list) return;
     setSubmitting(true);
@@ -120,6 +141,38 @@ export function ShoppingDetailPage() {
     } finally {
       setSubmitting(false);
       setCheckingId(null);
+    }
+  }
+
+  async function confirmEdit() {
+    if (!editingItemId || !list) return;
+    setSubmitting(true);
+    try {
+      await updateItem(list.shopping_list_id, editingItemId, editQuantity, family.family_id);
+      toast.success("Đã cập nhật định lượng cần mua.");
+      setEditOpen(false);
+      setEditingItemId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmAdd() {
+    if (!addFoodId || !list) return;
+    if (addQuantity <= 0) return toast.error("Số lượng phải lớn hơn 0.");
+    setSubmitting(true);
+    try {
+      await addItem(list.shopping_list_id, { food_id: addFoodId, quantity: addQuantity }, family.family_id);
+      toast.success("Đã thêm mặt hàng vào danh sách.");
+      setAddOpen(false);
+      setAddFoodId("");
+      setAddQuantity(1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể thêm mặt hàng.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -172,6 +225,16 @@ export function ShoppingDetailPage() {
               <span className="self-center text-sm font-semibold text-[#7655aa]">
                 {selectedIds.length} đã chọn
               </span>
+            )}
+            {!deleteMode && (
+              <Button
+                variant="outline"
+                className="border-[#7655aa] text-[#7655aa] hover:bg-[#f3f0fb]"
+                onClick={() => setAddOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm mặt hàng
+              </Button>
             )}
             <Button
               variant={deleteButtonVariant as "outline" | "destructive"}
@@ -273,7 +336,7 @@ export function ShoppingDetailPage() {
                       )}
                     </div>
                     <p className="text-xs text-[#746d82]">
-                      Cần {group.totalRequired} {group.unit} · Đã mua {group.totalBought} ·{" "}
+                      Cần {group.totalRequired} {group.unit} · Đã mua {group.totalBought} {group.unit} ·{" "}
                       {group.category} · {t(`shoppingStatus_${status}` as Parameters<typeof t>[0])}
                     </p>
                   </div>
@@ -281,6 +344,19 @@ export function ShoppingDetailPage() {
                     <Info className="h-4 w-4 shrink-0 text-[#9188a1]" />
                   )}
                 </button>
+                {/* Edit quantity button — single-item group only */}
+                {!deleteMode && group.items.length === 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditItem(group.items[0].id, group.items[0].quantity);
+                    }}
+                    className="shrink-0 rounded p-1 text-[#9188a1] hover:bg-[#f3f0fb] hover:text-[#7655aa]"
+                    title="Sửa định lượng cần mua"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -306,7 +382,67 @@ export function ShoppingDetailPage() {
         />
       </AppModal>
 
-      {/* Delete confirm modal */}
+      {/* Edit required quantity modal */}
+      <AppModal
+        open={editOpen}
+        onOpenChange={(open) => {
+          if (!open) { setEditOpen(false); setEditingItemId(null); }
+        }}
+        type="confirm"
+        title="Sửa định lượng cần mua"
+        primaryLabel={submitting ? "Đang lưu..." : "Lưu"}
+        secondaryLabel="Hủy"
+        onPrimary={confirmEdit}
+      >
+        <div className="space-y-2">
+          <p className="text-sm text-[#746d82]">Nhập định lượng cần mua mới:</p>
+          <Input
+            min={0.01}
+            step="0.01"
+            type="number"
+            value={editQuantity}
+            onChange={(e) => setEditQuantity(Number(e.target.value))}
+          />
+        </div>
+      </AppModal>
+
+      {/* Add item modal */}
+      <AppModal
+        open={addOpen}
+        onOpenChange={(open) => {
+          if (!open) { setAddOpen(false); setAddFoodId(""); setAddQuantity(1); }
+        }}
+        type="confirm"
+        title="Thêm mặt hàng vào danh sách"
+        primaryLabel={submitting ? "Đang thêm..." : "Thêm"}
+        secondaryLabel="Hủy"
+        onPrimary={confirmAdd}
+      >
+        <div className="space-y-3">
+          <Select value={addFoodId} onValueChange={setAddFoodId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Chọn thực phẩm" />
+            </SelectTrigger>
+            <SelectContent>
+              {foods.map((food) => (
+                <SelectItem key={food.food_id} value={food.food_id}>
+                  {food.icon} {food.food_name} · {food.category} · {food.unit}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            min={0.01}
+            step="0.01"
+            type="number"
+            value={addQuantity}
+            onChange={(e) => setAddQuantity(Number(e.target.value))}
+            placeholder="Số lượng"
+          />
+        </div>
+      </AppModal>
+
+      {/* Delete items confirm modal */}
       <AppModal
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -343,6 +479,10 @@ export function ShoppingDetailPage() {
             setCheckingId(itemId);
             setQuantity(qty);
           }}
+          onEditItem={(itemId, qty) => {
+            setDetailGroup(null);
+            openEditItem(itemId, qty);
+          }}
         />
       )}
     </>
@@ -354,14 +494,15 @@ function GroupedItemModal({
   fridgeItems,
   onClose,
   onSelectItem,
+  onEditItem,
 }: {
   group: GroupedItem;
   fridgeItems: FridgeRow[];
   onClose: () => void;
   onSelectItem: (itemId: string, qty: number) => void;
+  onEditItem: (itemId: string, currentQty: number) => void;
 }) {
   const t = useT();
-  // Try to get expiry from fridge for matching food name
   const fridgeMatches = fridgeItems.filter(
     (f) => f.food.food_name.toLowerCase() === group.food_name.toLowerCase(),
   );
@@ -448,34 +589,41 @@ function GroupedItemModal({
           </p>
           <div className="space-y-2">
             {group.items.map((item, idx) => (
-              <button
+              <div
                 key={item.id}
-                onClick={() => onSelectItem(item.id, item.bought_quantity ?? item.quantity)}
-                className="flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition hover:border-[#7655aa] hover:bg-[#f8f6fb]"
+                className="flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
               >
                 <span className="text-[#9188a1]">#{idx + 1}</span>
-                <div className="flex-1">
-                  <div className="font-semibold text-[#252033]">
-                    Cần {item.quantity} · Mua {item.bought_quantity ?? 0} · Còn{" "}
-                    {item.remaining_quantity ?? item.quantity}
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-bold ${statusColor[item.item_status ?? "PENDING"]}`}
+                <button
+                  onClick={() => onSelectItem(item.id, item.bought_quantity ?? item.quantity)}
+                  className="flex flex-1 items-start gap-2 text-left transition hover:text-[#7655aa]"
                 >
-                  {t(`shoppingStatus_${item.item_status ?? "PENDING"}` as Parameters<typeof t>[0])}
-                </span>
-              </button>
+                  <div className="flex-1">
+                    <div className="font-semibold text-[#252033]">
+                      Cần {item.quantity} {group.unit} · Mua {item.bought_quantity ?? 0} {group.unit} · Còn{" "}
+                      {item.remaining_quantity ?? item.quantity} {group.unit}
+                    </div>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${statusColor[item.item_status ?? "PENDING"]}`}
+                  >
+                    {t(`shoppingStatus_${item.item_status ?? "PENDING"}` as Parameters<typeof t>[0])}
+                  </span>
+                </button>
+                <button
+                  onClick={() => onEditItem(item.id, item.quantity)}
+                  className="shrink-0 rounded p-1 text-[#9188a1] hover:bg-[#f3f0fb] hover:text-[#7655aa]"
+                  title="Sửa định lượng"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
 
         <div className="border-t px-5 py-4">
-          <Button
-            variant="outline"
-            className="w-full rounded-xl"
-            onClick={onClose}
-          >
+          <Button variant="outline" className="w-full rounded-xl" onClick={onClose}>
             Đóng
           </Button>
         </div>
