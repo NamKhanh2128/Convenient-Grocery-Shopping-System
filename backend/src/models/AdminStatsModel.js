@@ -12,8 +12,8 @@ class AdminStatsModel {
       mealPlansResult,
       activeShoppingResult,
     ] = await Promise.all([
-      query(`SELECT COUNT(*) AS total FROM users WHERE role = 'USER' AND is_locked = FALSE`),
-      query(`SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN'`),
+      query(`SELECT COUNT(*) AS total FROM users WHERE LOWER(role) = 'user' AND is_locked = FALSE`),
+      query(`SELECT COUNT(*) AS total FROM users WHERE LOWER(role) = 'admin'`),
       query(`SELECT COUNT(*) AS total FROM foods`),
       query(`SELECT COUNT(*) AS total FROM recipes WHERE is_public = TRUE`),
       query(`SELECT COUNT(*) AS total FROM family_groups`),
@@ -33,25 +33,32 @@ class AdminStatsModel {
   }
 
   static async mealsByDay() {
-    // Meal plan item count per day for last 7 days — uses meal_plan_items (schema table)
+    // Meal plan item count per day for last 7 days. meal_date is a DATE column —
+    // TO_CHAR gives its calendar DD/MM directly (no timezone shift). The JS label
+    // is built the same DD/MM way so the two always match.
     const { rows } = await query(`
-      SELECT
-        TO_CHAR(DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC'), 'DD/MM') AS date,
-        COUNT(*) AS count
+      SELECT TO_CHAR(meal_date, 'DD/MM') AS date, COUNT(*)::int AS count
       FROM meal_plan_items
-      WHERE meal_date >= (CURRENT_DATE - INTERVAL '6 days')
-      GROUP BY DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC')
-      ORDER BY DATE_TRUNC('day', meal_date::timestamp AT TIME ZONE 'UTC') ASC
+      WHERE meal_date >= CURRENT_DATE - INTERVAL '6 days'
+        AND meal_date <= CURRENT_DATE
+      GROUP BY meal_date
+      ORDER BY meal_date ASC
     `);
+
+    const map = {};
+    for (const r of rows) {
+      map[r.date] = (map[r.date] || 0) + Number(r.count);
+    }
 
     // Build full 7-day series with zeros for missing days
     const result = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }).replace('/', '/');
-      const found = rows.find(r => r.date === label);
-      result.push({ date: label, count: found ? parseInt(found.count, 10) : 0 });
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const label = `${dd}/${mm}`;
+      result.push({ date: label, count: map[label] || 0 });
     }
     return result;
   }

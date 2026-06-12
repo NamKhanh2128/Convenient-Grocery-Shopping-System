@@ -58,6 +58,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
   const [nameVi, setNameVi] = useState("");
   const [nameEn, setNameEn] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [prepTime, setPrepTime] = useState<number>(15);
   const [cookTime, setCookTime] = useState<number>(30);
   const [servings, setServings] = useState<number>(4);
@@ -84,6 +85,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
           setNameVi(recipe.name_vi);
           setNameEn(recipe.name_en);
           setDescription(recipe.description ?? "");
+          setImageUrl(recipe.image_url ?? "");
           setPrepTime(recipe.prep_time ?? 0);
           setCookTime(recipe.cook_time ?? 0);
           setServings(recipe.servings ?? 0);
@@ -218,6 +220,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
           servings: servings,
           is_public: isPublic,
           created_by: null,
+          image_url: imageUrl.trim() || null,
         };
         await adminRecipeApi.create(payload, ingredientPayload);
         toast.success("Thêm công thức mới thành công!");
@@ -231,6 +234,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
           cook_time: cookTime,
           servings: servings,
           is_public: isPublic,
+          image_url: imageUrl.trim() || null,
         };
         await adminRecipeApi.update(Number(id), payload, ingredientPayload);
         toast.success("Cập nhật công thức thành công!");
@@ -349,6 +353,37 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
                   onChange={(e) => setDescription(e.target.value)}
                   className="rounded-xl min-h-[80px]"
                 />
+              </div>
+
+              {/* Image URL */}
+              <div className="space-y-1.5">
+                <Label htmlFor="image_url" className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Ảnh món ăn (URL)
+                </Label>
+                <Input
+                  id="image_url"
+                  placeholder="https://... (dán đường dẫn ảnh)"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="h-10 rounded-[8px] font-sans"
+                />
+                <div className="mt-2 h-36 w-full overflow-hidden rounded-xl border border-border/40 bg-muted flex items-center justify-center">
+                  {imageUrl.trim() ? (
+                    <img
+                      src={imageUrl}
+                      alt="Xem trước ảnh món ăn"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground/50">
+                      <BookOpen className="h-8 w-8" />
+                      <span className="text-[11px] font-semibold">Chưa có ảnh xem trước</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Prep & Cook time */}

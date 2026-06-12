@@ -34,16 +34,16 @@ export function Pagination({
 
   return (
     <div className={`flex flex-col items-center justify-between gap-4 py-4 sm:flex-row${className ? ` ${className}` : ""}`}>
-      <div className="text-sm font-medium text-muted-foreground">
-        Hiển thị <span className="text-foreground">{from}</span> -{" "}
-        <span className="text-foreground">{to}</span> trong{" "}
-        <span className="text-foreground">{total}</span> kết quả
+      <div className="text-sm font-medium text-white/70">
+        Hiển thị <span className="font-bold text-white">{from}</span> -{" "}
+        <span className="font-bold text-white">{to}</span> trong{" "}
+        <span className="font-bold text-white">{total}</span> kết quả
       </div>
       
       <div className="flex flex-wrap items-center gap-4 sm:gap-6">
         {onPageSizeChange && (
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Hàng trên trang</span>
+            <span className="text-sm font-medium text-white/70 whitespace-nowrap">Hàng trên trang</span>
             <Select
               value={String(pageSize)}
               onValueChange={(val) => {
@@ -91,7 +91,7 @@ export function Pagination({
           </Button>
 
           {/* Page indicator */}
-          <div className="flex items-center justify-center px-3 text-sm font-bold text-foreground min-w-[70px]">
+          <div className="flex items-center justify-center px-3 text-sm font-bold text-white min-w-[70px]">
             {page} / {totalPages}
           </div>
 

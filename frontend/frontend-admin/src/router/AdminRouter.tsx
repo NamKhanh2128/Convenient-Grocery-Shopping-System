@@ -61,9 +61,9 @@ function AdminProtectedRoute() {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#66429c] text-sm text-muted-foreground">
+      <div className="grid min-h-screen place-items-center bg-[#66429c] text-sm font-semibold text-white/85">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/80 border-t-transparent" />
           Đang tải hệ thống quản trị...
         </div>
       </div>

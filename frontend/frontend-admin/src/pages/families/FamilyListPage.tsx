@@ -61,6 +61,18 @@ export function FamilyListPage() {
     return filteredFamilies.slice(start, start + pageSize);
   }, [filteredFamilies, currentPage, pageSize]);
 
+  // Open the members dialog and lazily load the member list (the list
+  // endpoint only returns member_count, not the full members array).
+  const handleViewMembers = useCallback(async (row: FamilyWithMembers) => {
+    setViewTarget({ ...row, members: row.members ?? [] });
+    try {
+      const members = await adminFamilyApi.getMembers(row.id);
+      setViewTarget((prev) => (prev && prev.id === row.id ? { ...prev, members } : prev));
+    } catch {
+      toast.error("Không thể tải danh sách thành viên.");
+    }
+  }, []);
+
   // Delete family group
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -115,7 +127,7 @@ export function FamilyListPage() {
         sortable: true,
         render: (row) => (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#eee9f7] text-[#7655aa] border border-[#7655aa]/20">
-            {row.members.length} thành viên
+            {row.member_count ?? row.members?.length ?? 0} thành viên
           </span>
         ),
       },
@@ -128,7 +140,7 @@ export function FamilyListPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-blue-600 hover:bg-blue-500/15"
-              onClick={() => setViewTarget(row)}
+              onClick={() => handleViewMembers(row)}
               title="Xem danh sách thành viên"
             >
               <Eye className="h-4 w-4" />
@@ -147,7 +159,7 @@ export function FamilyListPage() {
         ),
       },
     ],
-    []
+    [handleViewMembers]
   );
 
   return (

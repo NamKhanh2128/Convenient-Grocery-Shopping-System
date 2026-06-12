@@ -148,12 +148,18 @@ export function SettingsPage() {
       />
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 rounded-2xl max-w-md bg-card border border-border/50 p-1">
-          <TabsTrigger value="profile" className="rounded-xl text-xs font-bold py-2.5">
+        <TabsList className="grid h-auto w-full max-w-md grid-cols-2 gap-1 rounded-2xl border border-border/50 bg-muted p-1">
+          <TabsTrigger
+            value="profile"
+            className="rounded-xl py-2.5 text-xs font-bold text-muted-foreground data-[state=active]:bg-[#7655aa] data-[state=active]:text-white data-[state=active]:shadow"
+          >
             <User className="h-4 w-4 mr-1.5 shrink-0" />
             Hồ sơ & Bảo mật
           </TabsTrigger>
-          <TabsTrigger value="system" className="rounded-xl text-xs font-bold py-2.5">
+          <TabsTrigger
+            value="system"
+            className="rounded-xl py-2.5 text-xs font-bold text-muted-foreground data-[state=active]:bg-[#7655aa] data-[state=active]:text-white data-[state=active]:shadow"
+          >
             <Database className="h-4 w-4 mr-1.5 shrink-0" />
             Cấu hình dữ liệu
           </TabsTrigger>

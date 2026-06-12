@@ -269,6 +269,7 @@ class ShoppingService {
       itemStatus,
       isPurchased,
       inventorySyncedQuantity,
+      userId != null ? Number(userId) : null,
     );
 
     const updatedItems = await ShoppingModel.listItems(listId);

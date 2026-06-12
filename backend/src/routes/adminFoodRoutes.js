@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(authRequired, adminRequired);
 
 router.get('/',              AdminFoodController.list);
+router.get('/:id',           AdminFoodController.getById);
 router.post('/',             AdminFoodController.create);
 router.put('/:id',           AdminFoodController.update);
 router.delete('/:id',        AdminFoodController.remove);

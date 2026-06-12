@@ -103,12 +103,28 @@ export function RecipeListPage() {
         header: "Tên công thức",
         sortable: true,
         render: (row) => (
-          <div>
-            <div className="font-bold text-sm text-foreground">{row.name_vi}</div>
-            <div className="text-xs font-semibold text-muted-foreground">{row.name_en}</div>
-            {row.description && (
-              <div className="text-xs text-muted-foreground truncate max-w-[250px]">{row.description}</div>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border/40 bg-muted flex items-center justify-center">
+              {row.image_url ? (
+                <img
+                  src={row.image_url}
+                  alt={row.name_vi}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : (
+                <BookOpen className="h-5 w-5 text-muted-foreground/40" />
+              )}
+            </div>
+            <div>
+              <div className="font-bold text-sm text-foreground">{row.name_vi}</div>
+              <div className="text-xs font-semibold text-muted-foreground">{row.name_en}</div>
+              {row.description && (
+                <div className="text-xs text-muted-foreground truncate max-w-[250px]">{row.description}</div>
+              )}
+            </div>
           </div>
         ),
       },
@@ -269,6 +285,16 @@ export function RecipeListPage() {
                   <div>
                     {/* Header */}
                     <div className="relative h-32 w-full bg-muted border-b border-border/30 overflow-hidden flex items-center justify-center">
+                      {recipe.image_url ? (
+                        <img
+                          src={recipe.image_url}
+                          alt={recipe.name_vi}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
                       <BookOpen className="h-10 w-10 text-muted-foreground/40" />
 
                       <div className="absolute top-3 left-3 bg-[#4b3178]/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[10px] font-bold border border-white/10">

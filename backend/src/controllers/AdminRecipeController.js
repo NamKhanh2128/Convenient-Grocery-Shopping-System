@@ -25,14 +25,14 @@ class AdminRecipeController {
 
   static async create(req, res) {
     try {
-      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients } = req.body;
+      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients } = req.body;
       if (!name_vi || !name_en) {
         return res.status(400).json({ success: false, message: 'Tên công thức (Tiếng Việt và Tiếng Anh) là bắt buộc.' });
       }
       if (!instructions || (typeof instructions === 'string' && !instructions.trim())) {
         return res.status(400).json({ success: false, message: 'Hướng dẫn thực hiện là bắt buộc.' });
       }
-      const recipe = await AdminRecipeModel.create({ name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients });
+      const recipe = await AdminRecipeModel.create({ name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients });
       return res.status(201).json({ success: true, data: recipe, message: 'Tạo công thức thành công.' });
     } catch (err) {
       console.error('[AdminRecipe.create]', err);
@@ -42,8 +42,8 @@ class AdminRecipeController {
 
   static async update(req, res) {
     try {
-      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients } = req.body;
-      const recipe = await AdminRecipeModel.update(req.params.id, { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients });
+      const { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients } = req.body;
+      const recipe = await AdminRecipeModel.update(req.params.id, { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients });
       if (!recipe) return res.status(404).json({ success: false, message: 'Không tìm thấy công thức.' });
       return res.status(200).json({ success: true, data: recipe, message: 'Cập nhật công thức thành công.' });
     } catch (err) {
