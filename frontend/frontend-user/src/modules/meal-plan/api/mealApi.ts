@@ -9,6 +9,7 @@ import { db, saveDb } from "@/shared/lib/mockDb";
 import { recipeApi } from "@/modules/recipe/api/recipeApi";
 
 import { shoppingApi } from "@/modules/shopping/api/shoppingApi";
+import { todayIso } from "@/shared/utils/date";
 
 
 
@@ -311,7 +312,7 @@ export const mealApi = {
     return shoppingApi.create({
       family_id,
       title: "Nguyên liệu thiếu từ kế hoạch bữa ăn",
-      plan_date: new Date().toISOString().slice(0, 10),
+      plan_date: todayIso(),
       list_type: "daily",
       created_by: user_id,
       items: missing.map((m) => ({
@@ -366,7 +367,7 @@ export const mealApi = {
 
       title,
 
-      plan_date: new Date().toISOString().slice(0, 10),
+      plan_date: todayIso(),
 
       list_type: "daily",
 

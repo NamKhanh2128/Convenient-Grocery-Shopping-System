@@ -2,6 +2,7 @@
 import { useMealPlanStore } from "@/modules/meal-plan/store/mealPlanStore";
 import type { MealSlot } from "@/modules/meal-plan/store/mealPlanStore";
 import { Button } from "@/components/ui/button";
+import { todayIso } from "@/shared/utils/date";
 
 const SLOTS: MealSlot[] = ["Sáng", "Trưa", "Tối"];
 
@@ -10,7 +11,7 @@ const DAY_LABELS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Th�
 export function MealScheduleTable() {
   const { weekDays, loading, prevWeek, nextWeek, goToCurrentWeek, openEdit, getSlotRecipes, removeRecipeFromSlot } = useMealPlanStore();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
 
   return (
     <div className="space-y-4">

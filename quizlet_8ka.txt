@@ -1,0 +1,85 @@
+決定する	けってい／Quyết định
+判断する	はんだん／Phán đoán, nhận định
+合わせる（目を～）	めをあわせる／Nhìn vào mắt nhau
+寄りかかる	よりかかる／Dựa vào, tựa vào
+合う（状況に）	じょうきょうにあう／Phù hợp (với tình hình)
+左右する	さゆうする／Chi phối
+要素	ようそ／Yếu tố
+視覚情報	しかくじょうほう／Thông tin nhìn thấy bằng mắt
+聴覚情報	ちょうかくじょうほう／Thông tin nghe thấy bằng tai
+ボディーランゲージ	ぼでぃーらんげーじ／Ngôn ngữ cơ thể
+説	せつ／Học thuyết, giả thuyết
+見た目	みため／Bề ngoài
+表情	ひょうじょう／Biểu cảm, sắc mặt
+姿勢	しせい／Tư thế, dáng đứng, dáng ngồi
+動作	どうさ／Động tác
+ポイント	ぽいんと／Điểm nhấn, điểm
+信頼（する）	しんらい／Sự tin tưởng
+無表情	むひょうじょう／Không biểu cảm
+前かがみ	まえかがみ／Nghiêng về phía trước
+背もたれ	せもたれ／Lưng ghế (tựa vào ~)
+威圧感（～を与える）	いあつかん／(gây) áp lực
+スピード	すぴーど／Tốc độ
+状況	じょうきょう／Tình huống, tình hình
+人間	にんげん／Con người
+中身	なかみ／Bên trong, nội dung
+言語的（な）	げんごてき／Mang tính ngôn ngữ
+非言語的（な）	ひげんごてき／Phi ngôn ngữ
+極端（な）	きょくたん／Mang tính cực đoan
+重要（な）	じゅうよう／Quan trọng, trọng yếu
+効果的に	こうかてきに／Một cách hiệu quả
+わずか	わずか／Một chút, chỉ
+第一印象	だいいちいんしょう／Ấn tượng đầu tiên
+心がける	こころがける／Để tâm, chú ý
+自然（な）	しぜん／Tự nhiên
+外見	がいけん／Ngoại hình, vẻ bề ngoài (lịch sự hơn 見た目)
+まね（する）	まね／Bắt chước
+収入	しゅうにゅう／Thu nhập
+優秀（な）	ゆうしゅう／Ưu tú, xuất sắc
+招く（誤解を）	まねく／Dẫn đến (hiểu lầm)
+栄養	えいよう／Dinh dưỡng
+バランス	ばらんす／Cân bằng
+言葉遣い	ことばづかい／Lời ăn tiếng nói, cách dùng từ
+自信満々に	じしんまんまんに／Đầy tự tin
+事業	じぎょう／Hoạt động kinh doanh
+拡大する（事業を～）	かくだいする／Mở rộng (hoạt động kinh doanh)
+サラリーマン	さらりーまん／Nhân viên công ty (người làm công ăn lương)
+仕事場	しごとば／Nơi làm việc
+プロポーズする	ぷろぽーずする／Cầu hôn
+幸福（な）	こうふく／Hạnh phúc
+品質	ひんしつ／Chất lượng
+気づく	きづく／Nhận ra (~に気づく)
+威張る	いばる／Kiêu căng, hợm hĩnh
+変換する	へんかんする／Biến đổi, chuyển đổi
+ミニドレス	みにどれす／Váy ngắn
+ビジネス	びじねす／Kinh doanh
+場面	ばめん／Hoàn cảnh, bối cảnh
+ミス（する）	みす／Lỗi, nhầm lẫn
+トラブル	とらぶる／Rắc rối (=問題)
+能力	のうりょく／Năng lực
+疑う	うたがう／Nghi ngờ
+引き起こす	ひきおこす／Gây ra
+成人する	せいじんする／Trưởng thành, thành nhân
+子供っぽい	こどもっぽい／Tính trẻ con
+長時間	ちょうじかん／Thời gian dài (⇔短時間)
+使用（する）	しようする／Sử dụng
+吐き気	はきけ／Buồn nôn
+下向き	したむき／Hướng xuống dưới
+めまい	めまい／Hoa mắt, chóng mặt
+適度（な）	てきど／Thích hợp, vừa phải
+休息	きゅうそく／Nghỉ ngơi, tạm nghỉ (≠休憩: nghỉ giải lao ngắn)
+勧める	すすめる／Khuyên, khuyến khích, gợi ý
+具体的（な）	ぐたいてき／Cụ thể
+軽視する	けいしする／Xem nhẹ (⇔重視する)
+ディベート（する）	でぃべーと／Cuộc tranh luận
+討論（する）	とうろん／Tranh luận, biện luận
+手順	てじゅん／Trình tự
+表現（する）	ひょうげん／Biểu hiện, cách diễn đạt
+同数	どうすう／Cùng 1 số
+作戦タイム	さくせんたいむ／Phút hội ý, thời gian bàn chiến thuật
+述べる	のべる／Trình bày
+反論（する）	はんろん／Phản biện
+再度	さいど／Một lần nữa
+述べ合う	のべあう／Trao đổi (ý kiến)
+個々に	ここに／Từng cá nhân, từng cái
+やはり	やはり／Quả đúng là, vẫn là

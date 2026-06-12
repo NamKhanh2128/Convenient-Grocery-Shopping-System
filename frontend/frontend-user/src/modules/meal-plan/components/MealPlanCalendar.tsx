@@ -2,6 +2,7 @@
 import { useMealPlanStore } from "@/modules/meal-plan/store/mealPlanStore";
 import { MealPlanDayCell } from "./MealPlanDayCell";
 import { Button } from "@/components/ui/button";
+import { todayIso as getTodayIso } from "@/shared/utils/date";
 
 const MONTH_NAMES = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
 
@@ -55,7 +56,7 @@ export function MealPlanCalendar({ compact = false }: { compact?: boolean }) {
         <div className={`grid gap-3 ${compact ? "grid-cols-1 max-w-xs" : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-7"}`}>
           {(compact
             ? (() => {
-                const todayIso = new Date().toISOString().slice(0, 10);
+                const todayIso = getTodayIso();
                 const todayIdx = weekDays.findIndex((d) => d === todayIso);
                 const idx = todayIdx >= 0 ? todayIdx : 0;
                 return [{ date: weekDays[idx], dayIndex: idx }];

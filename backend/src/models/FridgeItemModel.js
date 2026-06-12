@@ -47,7 +47,15 @@ const SORT_COLUMNS = {
 
 function formatDate(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    // The pg driver parses DATE columns as a JS Date at local midnight.
+    // Use local Y/M/D parts (not toISOString, which shifts to UTC and can
+    // roll the date back a day in timezones ahead of UTC, e.g. UTC+7).
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
   return String(value).slice(0, 10);
 }
 

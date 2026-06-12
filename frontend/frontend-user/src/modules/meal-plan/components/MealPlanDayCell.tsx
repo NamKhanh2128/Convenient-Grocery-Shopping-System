@@ -1,6 +1,7 @@
 ﻿import { CheckCircle2, Plus, Star } from "lucide-react";
 import type { MealSlot } from "@/modules/meal-plan/store/mealPlanStore";
 import { useMealPlanStore } from "@/modules/meal-plan/store/mealPlanStore";
+import { todayIso } from "@/shared/utils/date";
 
 const SLOTS: MealSlot[] = ["Sáng", "Trưa", "Tối"] as MealSlot[];
 
@@ -23,7 +24,7 @@ export function MealPlanDayCell({ date, dayIndex }: { date: string; dayIndex: nu
   const getSlotRecipes = useMealPlanStore((s) => s.getSlotRecipes);
   const isRecipeCooked = useMealPlanStore((s) => s.isRecipeCooked);
   const groups = useMealPlanStore((s) => s.groups);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   const isToday = date === today;
   const dateNum = new Date(date).getDate();
 

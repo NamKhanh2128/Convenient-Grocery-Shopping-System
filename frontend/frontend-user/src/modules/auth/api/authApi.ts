@@ -102,14 +102,44 @@ export const authApi = {
     if (!data.user) throw new Error("Dang ky that bai.");
     return { token: "", user: data.user, family: null };
   },
+  async refreshAccessToken(): Promise<string | null> {
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!refreshToken) return null;
+    try {
+      const data = await request<AuthResponse>(endpoints.auth.refresh, {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!data.accessToken) return null;
+      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+      return data.accessToken;
+    } catch {
+      return null;
+    }
+  },
   async current(): Promise<AuthSession | null> {
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    let token = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (!token) return null;
 
-    const data = await request<{ user: User }>(endpoints.auth.profile, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    let data: { user: User };
+    try {
+      data = await request<{ user: User }>(endpoints.auth.profile, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // Access token likely expired — try to refresh with the 7-day refresh token.
+      const newToken = await this.refreshAccessToken();
+      if (!newToken) {
+        clearSession();
+        return null;
+      }
+      token = newToken;
+      data = await request<{ user: User }>(endpoints.auth.profile, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
 
     const family = await familyApi.me().catch(() => null);
     return { token, refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) ?? undefined, user: data.user, family };

@@ -16,6 +16,7 @@ import type { Food } from "@/types";
 import { foodLocations } from "@/shared/constants/options";
 import { fridgeFormSchema } from "../schema";
 import { getErrorMessage } from "@/shared/utils/errors";
+import { todayIso } from "@/shared/utils/date";
 import { fridgeApi } from "../api/fridgeApi";
 
 type Values = z.infer<typeof fridgeFormSchema>;
@@ -33,7 +34,7 @@ export function FridgeFormPage({ mode }: { mode: "add" | "edit" }) {
   } | null>(null);
   const current = useMemo(() => items.find((item) => item.fridge_item_id === id), [items, id]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema) as any, defaultValues: { food_id: "", quantity: 1, expiry_date: new Date().toISOString().slice(0, 10), location: "Ngăn mát" } });
+  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<Values>({ resolver: zodResolver(fridgeFormSchema) as any, defaultValues: { food_id: "", quantity: 1, expiry_date: todayIso(), location: "Ngăn mát" } });
   const selectedFoodId = watch("food_id");
 
   useEffect(() => { void foodApi.list().then(setFoods); void load(family.family_id); }, [family.family_id, load]);

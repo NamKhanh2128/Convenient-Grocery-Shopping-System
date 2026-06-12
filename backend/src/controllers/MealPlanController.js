@@ -127,7 +127,9 @@ class MealPlanController {
         dates = Array.from({ length: 7 }, (_, i) => {
           const day = new Date(d);
           day.setDate(day.getDate() + i);
-          return day.toISOString().slice(0, 10);
+          // Local Y/M/D parts — toISOString would shift to UTC and roll the
+          // date back a day in timezones ahead of UTC (e.g. UTC+7).
+          return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
         });
       } else {
         dates = [anchor];

@@ -215,7 +215,9 @@ class ShoppingModel {
     const unit = food?.unit_name || unitSymbol || 'g';
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
-    const expiryDate = expiry.toISOString().slice(0, 10);
+    // Use local Y/M/D parts so the date isn't rolled back a day in timezones
+    // ahead of UTC (toISOString converts to UTC).
+    const expiryDate = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`;
 
     await FridgeItemModel.create(
       {

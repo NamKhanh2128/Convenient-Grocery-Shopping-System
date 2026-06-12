@@ -280,10 +280,10 @@ class FridgeController {
       const header = 'Tên thực phẩm,Số lượng,Đơn vị,Hạn sử dụng,Danh mục,Vị trí lưu trữ,Ngày thêm';
       const lines = rows.map((row) => {
         const expiry = row.expiry_date instanceof Date
-          ? row.expiry_date.toISOString().slice(0, 10)
+          ? `${row.expiry_date.getFullYear()}-${String(row.expiry_date.getMonth() + 1).padStart(2, '0')}-${String(row.expiry_date.getDate()).padStart(2, '0')}`
           : row.expiry_date;
         const created = row.created_at instanceof Date
-          ? row.created_at.toISOString().slice(0, 10)
+          ? `${row.created_at.getFullYear()}-${String(row.created_at.getMonth() + 1).padStart(2, '0')}-${String(row.created_at.getDate()).padStart(2, '0')}`
           : row.created_at;
         const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
         return [
