@@ -30,9 +30,9 @@ const STATUS_OPTIONS = [
 ];
 
 const ITEM_STATUS_OPTIONS = [
-  { value: "pending", label: "Chưa mua" },
-  { value: "partial", label: "Mua một phần" },
-  { value: "done", label: "Đã mua xong" },
+  { value: "PENDING", label: "Chưa mua" },
+  { value: "PARTIAL", label: "Mua một phần" },
+  { value: "COMPLETED", label: "Đã mua xong" },
 ];
 
 const NONE_USER = "NONE";
@@ -181,7 +181,7 @@ export function ShoppingListDetailPage() {
         key: "item_status",
         header: "Trạng thái mục",
         render: (item) => (
-          <Select value={item.item_status ?? "pending"} onValueChange={(value) => handleItemStatusChange(item, value)}>
+          <Select value={(item.item_status ?? "PENDING").toUpperCase()} onValueChange={(value) => handleItemStatusChange(item, value)}>
             <SelectTrigger className="h-8 w-[140px] text-xs font-semibold">
               <SelectValue />
             </SelectTrigger>

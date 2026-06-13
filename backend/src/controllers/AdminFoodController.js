@@ -19,7 +19,7 @@ class AdminFoodController {
       return res.status(200).json({ success: true, data: food });
     } catch (err) {
       console.error('[AdminFood.getById]', err);
-      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy thực phẩm.' });
+      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy thông tin thực phẩm.' });
     }
   }
 

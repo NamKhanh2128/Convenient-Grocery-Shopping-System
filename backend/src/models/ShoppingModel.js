@@ -113,15 +113,16 @@ class ShoppingModel {
     return rows[0].id;
   }
 
-  async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity) {
+  async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, purchasedBy = null) {
     await dbQuery(
       `UPDATE shopping_list_items
        SET bought_quantity = $1, remaining_quantity = $2, item_status = $3, is_purchased = $4,
            bought_status = $4,
            inventory_synced_quantity = $5,
-           purchased_at = CASE WHEN $6 = TRUE THEN NOW() ELSE purchased_at END
-       WHERE id = $7`,
-      [boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, isPurchased, itemId]
+           purchased_at = CASE WHEN $6 = TRUE THEN NOW() ELSE purchased_at END,
+           purchased_by = CASE WHEN $7 > 0 THEN $8 ELSE NULL END
+       WHERE id = $9`,
+      [boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, isPurchased, boughtQuantity, purchasedBy, itemId]
     );
   }
 

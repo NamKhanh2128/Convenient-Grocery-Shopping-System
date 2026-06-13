@@ -2,6 +2,11 @@
  * httpClient.ts
  * Lightweight HTTP client for admin API calls to the real backend.
  * Automatically attaches Authorization header from localStorage session.
+ *
+ * On a 401 (expired access token) it transparently refreshes the access token
+ * using the stored 7-day refresh token and retries the request once. If the
+ * refresh fails (refresh token also expired/revoked), it clears the session and
+ * redirects back to the login page.
  */
 
 /**
@@ -17,14 +22,63 @@ function normalizeBaseUrl(value?: string): string {
 // In production, set VITE_API_BASE_URL to the deployed backend origin (without trailing /api).
 const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
+const SESSION_KEY = "nateat.session";
+const ACCESS_TOKEN_KEY = "nateat.token";
+const REFRESH_TOKEN_KEY = "nateat.refreshToken";
+
 function getToken(): string | null {
   try {
-    const session = localStorage.getItem("nateat.session");
+    const session = localStorage.getItem(SESSION_KEY);
     if (session) {
       const parsed = JSON.parse(session) as { token?: string };
       return parsed?.token ?? null;
     }
-    return localStorage.getItem("nateat.token");
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveAccessToken(token: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  try {
+    const session = localStorage.getItem(SESSION_KEY);
+    if (session) {
+      const parsed = JSON.parse(session) as Record<string, unknown>;
+      parsed.token = token;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    /* ignore malformed session */
+  }
+}
+
+function clearSessionAndRedirect() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.assign("/login");
+  }
+}
+
+// Shared refresh promise so multiple concurrent 401s trigger only one refresh.
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as { accessToken?: string } | null;
+    if (!data?.accessToken) return null;
+    saveAccessToken(data.accessToken);
+    return data.accessToken;
   } catch {
     return null;
   }
@@ -34,7 +88,8 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  isRetry = false,
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -48,6 +103,22 @@ async function request<T>(
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  // Access token expired — attempt a single refresh + retry. Don't try to
+  // refresh the refresh call itself, and never loop.
+  if (response.status === 401 && !isRetry && !path.startsWith("/auth/refresh")) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const newToken = await refreshPromise;
+    if (newToken) {
+      return request<T>(method, path, body, extraHeaders, true);
+    }
+    clearSessionAndRedirect();
+    throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+  }
 
   const json = await response.json().catch(() => null);
 
