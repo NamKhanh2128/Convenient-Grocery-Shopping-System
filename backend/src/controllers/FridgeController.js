@@ -4,8 +4,17 @@ const STORAGE_LOCATIONS = FridgeItemModel.getStorageLocations();
 
 function getUserContext(req) {
   return {
-    userId: req.user.id,
-    familyGroupId: req.user.familyGroupId || req.query.familyGroupId || req.body?.familyGroupId || null,
+    userId: req.user.id ?? req.user.user_id,
+    // `authRequired` resolves the family group and exposes it as
+    // `family_group_id` / `family_id`. Falling back to query/body keeps the
+    // explicit-override behaviour the controller already supported.
+    familyGroupId:
+      req.user.family_group_id ||
+      req.user.family_id ||
+      req.user.familyGroupId ||
+      req.query.familyGroupId ||
+      req.body?.familyGroupId ||
+      null,
   };
 }
 
@@ -250,8 +259,8 @@ class FridgeController {
 
   static async getExpiring(req, res) {
     try {
-      const { userId } = getUserContext(req);
-      const items = await FridgeItemModel.findExpiring(userId, 3);
+      const { userId, familyGroupId } = getUserContext(req);
+      const items = await FridgeItemModel.findExpiring(userId, 3, familyGroupId);
       return res.status(200).json({
         success: true,
         data: { items },
@@ -271,10 +280,10 @@ class FridgeController {
       const header = 'Tên thực phẩm,Số lượng,Đơn vị,Hạn sử dụng,Danh mục,Vị trí lưu trữ,Ngày thêm';
       const lines = rows.map((row) => {
         const expiry = row.expiry_date instanceof Date
-          ? row.expiry_date.toISOString().slice(0, 10)
+          ? `${row.expiry_date.getFullYear()}-${String(row.expiry_date.getMonth() + 1).padStart(2, '0')}-${String(row.expiry_date.getDate()).padStart(2, '0')}`
           : row.expiry_date;
         const created = row.created_at instanceof Date
-          ? row.created_at.toISOString().slice(0, 10)
+          ? `${row.created_at.getFullYear()}-${String(row.created_at.getMonth() + 1).padStart(2, '0')}-${String(row.created_at.getDate()).padStart(2, '0')}`
           : row.created_at;
         const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
         return [

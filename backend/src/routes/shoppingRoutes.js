@@ -13,6 +13,7 @@ router.delete('/:listId', ctrl.deleteList);
 router.post('/:listId/items', ctrl.addItem);
 router.delete('/:listId/items', ctrl.deleteItems);
 router.patch('/:listId/items/:itemId/purchased', ctrl.recordPurchase);
+router.patch('/:listId/items/:itemId', ctrl.updateItem);
 router.patch('/:listId/complete', ctrl.completeList);
 
 module.exports = router;

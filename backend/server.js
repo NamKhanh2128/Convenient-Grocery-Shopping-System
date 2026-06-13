@@ -10,14 +10,14 @@ const recipeRoutes = require('./src/routes/recipeRoutes');
 const shoppingRoutes = require('./src/routes/shoppingRoutes');
 const foodRoutes = require('./src/routes/foodRoutes');
 const mealPlanRoutes = require('./src/routes/mealPlanRoutes');
+const statsRoutes = require('./src/routes/statsRoutes');
 
 // ─── Admin routes ────────────────────────────────────────────────────────────
 const adminUserRoutes     = require('./src/routes/adminUserRoutes');
 const adminFoodRoutes     = require('./src/routes/adminFoodRoutes');
 const adminRecipeRoutes   = require('./src/routes/adminRecipeRoutes');
-const adminRecipeCategoryRoutes = require('./src/routes/adminRecipeCategoryRoutes');
-const adminShoppingRoutes = require('./src/routes/adminShoppingRoutes');
-const adminMealPlanRoutes = require('./src/routes/adminMealPlanRoutes');
+const adminFoodCategoryRoutes = require('./src/routes/adminFoodCategoryRoutes');
+const adminUnitRoutes         = require('./src/routes/adminUnitRoutes');
 const adminFamilyRoutes   = require('./src/routes/adminFamilyRoutes');
 const adminStatsRoutes    = require('./src/routes/adminStatsRoutes');
 const adminSettingsRoutes = require('./src/routes/adminSettingsRoutes');
@@ -27,25 +27,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
-// Supports both exact origins and regex patterns (prefix entry with 'regex:').
-// In development (CORS_ORIGINS not set): allow all origins for convenience.
-// In production: set CORS_ORIGINS env var on Railway.
+// In development: allow every origin (localhost, LAN IPs, 127.0.0.1, any port).
+// In production: allow whitelisted origins from CORS_ORIGINS, plus localhost and
+// any *.vercel.app deployment of this project (preview URLs change per deploy).
 //
-// Example CORS_ORIGINS value:
+// CORS_ORIGINS entries may be exact origins or regex patterns prefixed with
+// 'regex:'. Example:
 //   https://myapp.vercel.app,regex:https://myapp-.*\.vercel\.app
-const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || '';
+const isProduction = process.env.NODE_ENV === 'production';
+const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS
+  || 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
 
-// Build two lists: exact strings and compiled RegExp patterns
+// Split CORS_ORIGINS into exact strings and compiled RegExp patterns.
 const { exactOrigins, originPatterns } = (() => {
-  if (!CORS_ORIGINS_ENV.trim()) return { exactOrigins: [], originPatterns: [] };
   const exact = [];
   const patterns = [];
-  // Always allow localhost in dev fallback
-  const devDefaults = ['http://localhost:5173', 'http://localhost:5174'];
-  const entries = [...devDefaults, ...CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)];
-  for (const entry of entries) {
+  for (const entry of CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)) {
     if (entry.startsWith('regex:')) {
-      try { patterns.push(new RegExp(entry.slice(6))); } catch (e) { /* ignore bad regex */ }
+      try { patterns.push(new RegExp(entry.slice(6))); } catch { /* ignore bad regex */ }
     } else {
       exact.push(entry);
     }
@@ -53,28 +52,34 @@ const { exactOrigins, originPatterns } = (() => {
   return { exactOrigins: exact, originPatterns: patterns };
 })();
 
-function isOriginAllowed(origin) {
+function isAllowedOrigin(origin) {
+  // No Origin header => same-origin, curl, or server-to-server: always allow.
+  if (!origin) return true;
   if (exactOrigins.includes(origin)) return true;
-  return originPatterns.some((re) => re.test(origin));
+  if (originPatterns.some((re) => re.test(origin))) return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    if (host.endsWith('.vercel.app')) return true;
+  } catch {
+    return false;
+  }
+  return false;
 }
 
-app.use(
-  cors(
-    CORS_ORIGINS_ENV.trim()
-      ? {
-          origin: (origin, callback) => {
-            // Allow server-to-server requests (no Origin header) and whitelisted origins
-            if (!origin || isOriginAllowed(origin)) {
-              callback(null, true);
-            } else {
-              callback(new Error(`CORS policy: origin ${origin} is not allowed`));
-            }
-          },
-          credentials: true,
-        }
-      : undefined // Allows all origins when CORS_ORIGINS is not set (local dev)
-  )
-);
+const corsOptions = {
+  origin: (origin, callback) => {
+    // In dev allow everything; in prod enforce the allow-list. Never throw —
+    // a disallowed origin just gets no CORS headers (callback(null, false)),
+    // which the browser blocks cleanly instead of triggering a 500.
+    callback(null, !isProduction || isAllowedOrigin(origin));
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+// Answer CORS preflight (OPTIONS) for every route with the same policy.
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 app.use('/auth', authRoutes);
@@ -85,14 +90,14 @@ app.use('/api/recipes', recipeRoutes);
 app.use('/api/shopping-lists', shoppingRoutes);
 app.use('/api/foods', foodRoutes);
 app.use('/api/meal-plans', mealPlanRoutes);
+app.use('/api/stats', statsRoutes);
 
 // ─── Admin API namespace ─────────────────────────────────────────────────────
 app.use('/api/admin/users',      adminUserRoutes);
 app.use('/api/admin/foods',      adminFoodRoutes);
 app.use('/api/admin/recipes',    adminRecipeRoutes);
-app.use('/api/admin/recipe-categories', adminRecipeCategoryRoutes);
-app.use('/api/admin/shopping-lists', adminShoppingRoutes);
-app.use('/api/admin/meal-plans', adminMealPlanRoutes);
+app.use('/api/admin/food-categories', adminFoodCategoryRoutes);
+app.use('/api/admin/units',            adminUnitRoutes);
 app.use('/api/admin/families',   adminFamilyRoutes);
 app.use('/api/admin/stats',      adminStatsRoutes);
 app.use('/api/admin/settings',   adminSettingsRoutes);
@@ -143,6 +148,11 @@ app.get('/health/db', async (_req, res) => {
 });
 
 app.get('/api/users', async (_req, res) => {
+  // Dev-only helper that dumps the user table without auth. Disabled in
+  // production to avoid leaking the full user list.
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ message: 'Not found' });
+  }
   try {
     const { rows } = await pool.query(
       'SELECT id, email, full_name, phone, role, is_locked, created_at, updated_at FROM users LIMIT 50'

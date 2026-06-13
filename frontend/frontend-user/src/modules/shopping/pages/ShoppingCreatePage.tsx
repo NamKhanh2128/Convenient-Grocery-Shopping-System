@@ -1,19 +1,16 @@
-import { Plus, Share2, Trash2, Users } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { useShoppingStore } from "@/modules/shopping/store/shoppingStore";
-import { FlowSteps } from "@/shared/components/FlowSteps";
 import { ScreenHeader } from "@/shared/components/ScreenHeader";
 import { AppModal } from "@/shared/components/AppModal";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { foodApi } from "@/shared/api/foodApi";
-import { familyApi } from "@/modules/family/api/familyApi";
-import type { Food, ShoppingType, User, FoodUnit, FoodCategory } from "@/types";
+import type { Food, ShoppingType, FoodUnit, FoodCategory } from "@/types";
 import { type ShoppingCreateItem } from "@/modules/shopping/api/shoppingApi";
 import { todayIso } from "@/shared/utils/date";
 
@@ -31,25 +28,16 @@ export function ShoppingCreatePage() {
   const family = useAuthStore((state) => state.family)!;
   const create = useShoppingStore((state) => state.create);
   const [foods, setFoods] = useState<Food[]>([]);
-  const [members, setMembers] = useState<User[]>([]);
   const [title, setTitle] = useState("");
   const [listType, setListType] = useState<ShoppingType>("daily");
   const [planDate, setPlanDate] = useState(todayIso());
   const [rows, setRows] = useState<SelectSectionRow[]>([{ food_id: "", quantity: 1 }]);
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [validationOpen, setValidationOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [savedListId, setSavedListId] = useState<string | null>(null);
-  const [createdListId, setCreatedListId] = useState<string | null>(null);
 
   useEffect(() => {
     void foodApi.list().then(setFoods);
-    void familyApi.detail(family.family_id).then((data) => {
-      setMembers(data.members);
-      setSelectedMemberIds(data.members.map((member) => member.user_id));
-    });
-  }, [family.family_id]);
+  }, []);
 
   function updateRow(index: number, patch: Partial<SelectSectionRow>) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -101,13 +89,9 @@ export function ShoppingCreatePage() {
         plan_date: planDate,
         created_by: user.user_id,
         items: allItems,
-        share_member_ids: members.length ? selectedMemberIds : undefined,
       });
       toast.success("Tạo danh sách thành công");
-      setSavedListId(list.shopping_list_id);
-      setCreatedListId(list.shopping_list_id);
-      if (members.length > 1) setShareOpen(true);
-      else navigate(`/shopping/${list.shopping_list_id}`);
+      navigate(`/shopping/${list.shopping_list_id}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Không thể tạo danh sách.");
     } finally {
@@ -115,20 +99,11 @@ export function ShoppingCreatePage() {
     }
   }
 
-  function handleShare() {
-    if (!savedListId) {
-      toast.error("Lưu danh sách trước khi chia sẻ.");
-      return;
-    }
-    setShareOpen(true);
-  }
-
   return (
     <>
       <ScreenHeader title="Tạo danh sách mua sắm" subtitle="Chọn thực phẩm từ danh sách có sẵn." />
       <section className="rounded-[8px] bg-white p-6 shadow-card">
-        <FlowSteps steps={["Chọn kiểu", "Thêm mặt hàng", "Lưu danh sách", "Chia sẻ"]} current={2} />
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Tiêu đề danh sách" />
           <Select value={listType} onValueChange={(value) => setListType(value as ShoppingType)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -224,14 +199,6 @@ export function ShoppingCreatePage() {
           <Button onClick={saveList} disabled={submitting} className="bg-[#7655aa]">
             {submitting ? "Đang lưu..." : "Lưu danh sách"}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleShare}
-            disabled={!savedListId}
-            className={savedListId ? "border-[#7655aa] text-[#7655aa] hover:bg-[#f8f6fb]" : ""}
-          >
-            <Share2 className="mr-2 h-4 w-4" />Chia sẻ
-          </Button>
           <Button variant="outline" onClick={() => navigate("/shopping")}>Hủy</Button>
         </div>
       </section>
@@ -243,35 +210,6 @@ export function ShoppingCreatePage() {
         title="Danh sách cần ít nhất 1 sản phẩm"
         secondaryLabel="Đóng"
       />
-      <AppModal
-        open={shareOpen}
-        onOpenChange={setShareOpen}
-        type="confirm"
-        title="Chia sẻ danh sách"
-        primaryLabel="Chia sẻ"
-        secondaryLabel="Bỏ qua"
-        onPrimary={() => {
-          toast.success("Đã chia sẻ danh sách cho các thành viên.");
-          navigate(createdListId ? `/shopping/${createdListId}` : "/shopping");
-        }}
-        onSecondary={() => navigate(createdListId ? `/shopping/${createdListId}` : "/shopping")}
-      >
-        <div className="space-y-2">
-          {members.map((member) => (
-            <label key={member.user_id} className="flex items-center gap-2 rounded-[8px] bg-[#f8f6fb] p-2">
-              <Checkbox
-                checked={selectedMemberIds.includes(member.user_id)}
-                onCheckedChange={(checked) =>
-                  setSelectedMemberIds((prev) =>
-                    checked ? [...prev, member.user_id] : prev.filter((id) => id !== member.user_id),
-                  )
-                }
-              />
-              <Users className="h-4 w-4" /> {member.full_name}
-            </label>
-          ))}
-        </div>
-      </AppModal>
     </>
   );
 }

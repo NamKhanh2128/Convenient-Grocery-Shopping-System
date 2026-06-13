@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 export function FridgePage() {
   const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
-  const { items, load, remove, removeMany, update, loading, error } = useFridgeStore();
+  const { items, load, remove, removeMany, update, setQuantity, loading, error } = useFridgeStore();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [expiry, setExpiry] = useState("all");
@@ -105,8 +105,22 @@ export function FridgePage() {
       toast.error("Số lượng dùng phải lớn hơn 0.");
       return;
     }
-    await update(item.fridge_item_id, { food_id: item.food_id, quantity: Math.max(0, item.quantity - consumeQuantity), expiry_date: item.expiry_date, location: item.location }, family.family_id);
-    toast.success("Đã cập nhật số lượng trong tủ lạnh.");
+    if (consumeQuantity > item.quantity) {
+      toast.error(`Chỉ còn ${item.quantity} ${item.food.unit} trong tủ.`);
+      return;
+    }
+    try {
+      const nextQuantity = Math.max(0, item.quantity - consumeQuantity);
+      await setQuantity(item.fridge_item_id, nextQuantity, family.family_id);
+      toast.success(
+        nextQuantity === 0
+          ? `Đã dùng hết "${item.food.food_name}".`
+          : `Đã dùng ${consumeQuantity} ${item.food.unit}, còn lại ${nextQuantity} ${item.food.unit}.`,
+      );
+      setConsumeId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể cập nhật số lượng.");
+    }
   }
 
   function exportCsv() {

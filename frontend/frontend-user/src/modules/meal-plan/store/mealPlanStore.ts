@@ -72,6 +72,8 @@ interface MealPlanState {
 
   suggestions: RecipeSuggestion[];
 
+  planMissing: Array<{ food_name: string; quantity: number; unit: string }>;
+
   loading: boolean;
 
   familyId: string | null;
@@ -100,13 +102,19 @@ interface MealPlanState {
 
   replaceRecipeInSlot: (date: string, slot: MealSlot, oldRecipeId: string, newRecipeId: string) => Promise<void>;
 
+  markRecipeCooked: (date: string, slot: MealSlot, recipeId: string, isCooked: boolean) => Promise<void>;
+
   removeSuggestion: (recipeId: string) => void;
 
   getSlotRecipes: (date: string, slot: MealSlot) => RecipeDetail[];
 
+  isRecipeCooked: (date: string, slot: MealSlot, recipeId: string) => boolean;
+
   getMissingForRecipe: (recipeId: string) => RecipeSuggestion["missing"];
 
   createShoppingFromMissing: (familyId: string, userId: string) => Promise<void>;
+
+  autoGenerateMealPlan: (mode: "day" | "week", overwrite?: boolean) => Promise<void>;
 
 }
 
@@ -125,6 +133,8 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
   recipes: [],
 
   suggestions: [],
+
+  planMissing: [],
 
   loading: false,
 
@@ -167,6 +177,12 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
         set({ suggestions });
 
       }).catch(() => set({ suggestions: [] }));
+
+      void mealApi.getMissingIngredients(familyId, days[0], days[6]).then((planMissing) => {
+
+        set({ planMissing });
+
+      }).catch(() => set({ planMissing: [] }));
 
     } catch {
 
@@ -264,6 +280,43 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
 
 
+  markRecipeCooked: async (date, slot, recipeId, isCooked) => {
+
+    const { familyId } = get();
+
+    if (!familyId) return;
+
+    await mealApi.markCooked(familyId, date, slot, recipeId, isCooked);
+
+    // Optimistic update — toggle cooked_recipe_ids in local state without full reload
+    set((state) => ({
+
+      groups: state.groups.map((g) => {
+
+        if (g.meal_date !== date || g.meal_type !== slot) return g;
+
+        const cooked = g.cooked_recipe_ids ?? [];
+
+        return {
+
+          ...g,
+
+          cooked_recipe_ids: isCooked
+
+            ? [...new Set([...cooked, recipeId])]
+
+            : cooked.filter((id) => id !== recipeId),
+
+        };
+
+      }),
+
+    }));
+
+  },
+
+
+
   removeSuggestion: (recipeId) => set((state) => ({
 
     suggestions: state.suggestions.filter((suggestion) => suggestion.recipe.recipe_id !== recipeId),
@@ -286,6 +339,18 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
 
 
+  isRecipeCooked: (date, slot, recipeId) => {
+
+    const { groups } = get();
+
+    const group = groups.find((g) => g.meal_date === date && g.meal_type === slot);
+
+    return Boolean(group?.cooked_recipe_ids?.includes(recipeId));
+
+  },
+
+
+
   getMissingForRecipe: (recipeId) => {
 
     const { suggestions } = get();
@@ -298,7 +363,25 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
   createShoppingFromMissing: async (familyId, userId) => {
 
-    await mealApi.createShoppingListForMissing(familyId, userId, "Nguyên liệu thiếu từ kế hoạch bữa ăn");
+    const { planMissing } = get();
+
+    await mealApi.createShoppingFromPlan(familyId, userId, planMissing);
+
+    await get().loadWeek(familyId);
+
+  },
+
+
+
+  autoGenerateMealPlan: async (mode, overwrite = false) => {
+
+    const { familyId, weekAnchor, weekDays } = get();
+
+    if (!familyId) return;
+
+    const anchorDate = mode === "week" ? weekDays[0] : localIso(new Date());
+
+    await mealApi.autoGenerate(familyId, mode, anchorDate, overwrite);
 
     await get().loadWeek(familyId);
 

@@ -20,6 +20,8 @@ export function FamilyListPage() {
 
   // Dialog States
   const [viewTarget, setViewTarget] = useState<FamilyWithMembers | null>(null);
+  const [viewMembers, setViewMembers] = useState<FamilyWithMembers["members"]>([]);
+  const [viewMembersLoading, setViewMembersLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FamilyWithMembers | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -78,6 +80,20 @@ export function FamilyListPage() {
     }
   };
 
+  const handleViewMembers = async (family: FamilyWithMembers) => {
+    setViewTarget(family);
+    setViewMembersLoading(true);
+    setViewMembers([]);
+    try {
+      const members = await adminFamilyApi.getMembers(family.id);
+      setViewMembers(members);
+    } catch {
+      toast.error("Không thể tải danh sách thành viên.");
+    } finally {
+      setViewMembersLoading(false);
+    }
+  };
+
   // Column definitions for the families list
   const columns: Column<FamilyWithMembers>[] = useMemo(
     () => [
@@ -115,7 +131,7 @@ export function FamilyListPage() {
         sortable: true,
         render: (row) => (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#eee9f7] text-[#7655aa] border border-[#7655aa]/20">
-            {row.members.length} thành viên
+            {row.member_count ?? row.members?.length ?? 0} thành viên
           </span>
         ),
       },
@@ -128,7 +144,7 @@ export function FamilyListPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-blue-600 hover:bg-blue-500/15"
-              onClick={() => setViewTarget(row)}
+              onClick={() => handleViewMembers(row)}
               title="Xem danh sách thành viên"
             >
               <Eye className="h-4 w-4" />
@@ -147,7 +163,7 @@ export function FamilyListPage() {
         ),
       },
     ],
-    []
+    [handleViewMembers]
   );
 
   return (
@@ -187,7 +203,15 @@ export function FamilyListPage() {
       </div>
 
       {/* Dialog: View Members */}
-      <Dialog open={Boolean(viewTarget)} onOpenChange={(open) => !open && setViewTarget(null)}>
+      <Dialog
+        open={Boolean(viewTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewTarget(null);
+            setViewMembers([]);
+          }
+        }}
+      >
         <DialogContent className="max-w-md bg-white rounded-2xl shadow-xl border border-border/40 p-6">
           <DialogHeader className="mb-4">
             <DialogTitle className="text-lg font-bold text-[#5b368d] flex items-center gap-2">
@@ -200,9 +224,11 @@ export function FamilyListPage() {
           </DialogHeader>
 
           <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-            {viewTarget?.members && viewTarget.members.length > 0 ? (
-              viewTarget.members.map((member) => {
-                const isCreator = member.user_id === viewTarget.created_by;
+            {viewMembersLoading ? (
+              <div className="text-center py-6 text-sm text-muted-foreground">Đang tải thành viên...</div>
+            ) : viewMembers.length > 0 ? (
+              viewMembers.map((member) => {
+                const isCreator = member.user_id === viewTarget?.created_by;
                 return (
                   <div
                     key={member.id}
@@ -225,7 +251,7 @@ export function FamilyListPage() {
                       </div>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#eee9f7] text-[#7655aa] border border-[#7655aa]/20">
-                      {member.role === "ADMIN" ? "Quản trị viên" : "Người dùng"}
+                      {member.role?.toUpperCase() === "ADMIN" ? "Quản trị viên" : "Người dùng"}
                     </span>
                   </div>
                 );

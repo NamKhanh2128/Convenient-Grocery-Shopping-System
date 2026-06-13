@@ -24,7 +24,7 @@ function mapRecipe(row, ingredients = []) {
     khau_phan: Number(row.servings || 4),
     calories: null,
     do_kho: 'Trung bình',
-    hinh_anh_url: '',
+    hinh_anh_url: row.image_url || '',
     loai_quyen: row.is_public ? 'SYSTEM' : 'PRIVATE',
     danh_muc: null,
     nguoi_tao_id: row.created_by ? String(row.created_by) : null,
@@ -52,7 +52,30 @@ class RecipeModel {
   }
 
   static async getCategories() {
-    return [];
+    const { rows } = await query(
+      `SELECT danh_muc_cong_thuc_id AS id, ten_danh_muc AS ten FROM danh_muc_cong_thuc ORDER BY ten_danh_muc ASC`
+    );
+    return rows;
+  }
+
+  static async getPopular({ userId, limit = 5 }) {
+    const { rows } = await query(
+      `SELECT r.*,
+              COUNT(mpi.id)::int AS cook_count,
+              (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) AS ingredient_count
+       FROM recipes r
+       JOIN meal_plan_items mpi ON mpi.recipe_id = r.id
+       JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
+       WHERE mpi.is_cooked = true
+         AND mp.user_id = $1
+         AND (r.is_public = true OR r.created_by = $1)
+       GROUP BY r.id
+       ORDER BY cook_count DESC
+       LIMIT $2`,
+      [Number(userId), Math.max(1, Number(limit) || 5)]
+    );
+    const marked = await this.markFavorites(rows, userId);
+    return marked.map((row) => ({ ...mapRecipe(row, []), cook_count: row.cook_count }));
   }
 
   static async loadIngredients(recipeIds) {
@@ -85,13 +108,35 @@ class RecipeModel {
     return rows.map((row) => ({ ...row, da_yeu_thich: favSet.has(String(row.id)) }));
   }
 
-  static async listBase({ search = null, limit = 100, offset = 0, publicOnly = false, userId = null } = {}) {
+  static async listBase({ search = null, limit = 100, offset = 0, publicOnly = false, userId = null, privacy = null, timeTag = null } = {}) {
     const params = [search || null, Math.min(200, Math.max(1, Number(limit) || 100)), Math.max(0, Number(offset) || 0)];
-    let visibility = '';
-    if (publicOnly) visibility = 'AND is_public = true';
-    else if (userId) {
+
+    // Base visibility clause
+    let visibilityClause = '';
+    if (publicOnly) {
+      visibilityClause = 'AND r.is_public = true';
+    } else if (userId) {
       params.push(Number(userId));
-      visibility = `AND (is_public = true OR created_by = $${params.length})`;
+      visibilityClause = `AND (r.is_public = true OR r.created_by = $${params.length})`;
+    }
+
+    // Privacy sub-filter
+    let privacyClause = '';
+    if (privacy && privacy !== 'all') {
+      if (privacy === 'SYSTEM') {
+        privacyClause = 'AND r.is_public = true';
+      } else if (privacy === 'PRIVATE' && userId) {
+        params.push(Number(userId));
+        privacyClause = `AND r.is_public = false AND r.created_by = $${params.length}`;
+      }
+    }
+
+    // Time tag filter
+    let timeClause = '';
+    if (timeTag && timeTag !== 'all') {
+      if (timeTag === 'nhanh') timeClause = 'AND (COALESCE(r.prep_time, 0) + COALESCE(r.cook_time, 0)) < 30';
+      else if (timeTag === 'vua') timeClause = 'AND (COALESCE(r.prep_time, 0) + COALESCE(r.cook_time, 0)) BETWEEN 30 AND 60';
+      else if (timeTag === 'lau') timeClause = 'AND (COALESCE(r.prep_time, 0) + COALESCE(r.cook_time, 0)) > 60';
     }
 
     const { rows } = await query(
@@ -99,7 +144,9 @@ class RecipeModel {
               (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) AS ingredient_count
        FROM recipes r
        WHERE ($1::text IS NULL OR r.name_vi ILIKE '%' || $1 || '%' OR r.name_en ILIKE '%' || $1 || '%')
-         ${visibility}
+         ${visibilityClause}
+         ${privacyClause}
+         ${timeClause}
        ORDER BY r.updated_at DESC, r.created_at DESC
        LIMIT $2 OFFSET $3`,
       params
@@ -114,8 +161,8 @@ class RecipeModel {
     return rows.map((row) => mapRecipe(row, ingredients.get(String(row.id)) || []));
   }
 
-  static async findAccessible({ userId, search, limit, offset, lite = true }) {
-    let rows = await this.listBase({ search, limit, offset, userId });
+  static async findAccessible({ userId, search, limit, offset, lite = true, privacy = null, timeTag = null }) {
+    let rows = await this.listBase({ search, limit, offset, userId, privacy, timeTag });
     rows = await this.markFavorites(rows, userId);
     if (lite) return rows.map((row) => mapRecipe(row, []));
     const ingredients = await this.loadIngredients(rows.map((row) => row.id));
@@ -282,6 +329,50 @@ class RecipeModel {
     return { recipe, missing, available_food_ids };
   }
 
+  static async getMissingForPlan({ userId, fromDate, toDate }) {
+    // Get unique recipe IDs planned for the date range
+    const { rows: planItems } = await query(
+      `SELECT DISTINCT mpi.recipe_id
+       FROM meal_plan_items mpi
+       JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
+       WHERE mp.user_id = $1
+         AND mpi.meal_date BETWEEN $2 AND $3`,
+      [Number(userId), fromDate, toDate]
+    );
+    if (!planItems.length) return [];
+
+    const recipeIds = planItems.map((r) => Number(r.recipe_id));
+
+    // Aggregate total ingredient needs across all planned recipes
+    const { rows: ingredients } = await query(
+      `SELECT ri.name, COALESCE(SUM(ri.quantity), 0) AS total_quantity,
+              u.symbol AS unit_symbol, u.name AS unit_name
+       FROM recipe_ingredients ri
+       LEFT JOIN units u ON u.id = ri.unit_id
+       WHERE ri.recipe_id = ANY($1::int[])
+       GROUP BY ri.name, u.symbol, u.name`,
+      [recipeIds]
+    );
+    if (!ingredients.length) return [];
+
+    // Get fridge stock once
+    const stock = await this.getStock(userId);
+
+    const missing = [];
+    for (const ing of ingredients) {
+      const available = stock.get(normalizeText(ing.name)) || 0;
+      const needed = Number(ing.total_quantity) || 1;
+      if (available < needed) {
+        missing.push({
+          food_name: ing.name,
+          quantity: Number((needed - available).toFixed(2)),
+          unit: ing.unit_symbol || ing.unit_name || 'g',
+        });
+      }
+    }
+    return missing;
+  }
+
   static async suggestFromFridge({ userId, limit = 20 }) {
     const recipes = await this.findAccessible({ userId, limit, lite: false });
     const suggestions = [];
@@ -290,6 +381,24 @@ class RecipeModel {
       suggestions.push({ recipe, available_food_ids: result.available_food_ids, missing: result.missing });
     }
     return suggestions.sort((a, b) => a.missing.length - b.missing.length).slice(0, limit);
+  }
+
+  static async deductIngredientsBestEffort({ recipeId, userId }) {
+    const recipe = await this.findById({ id: recipeId, userId });
+    if (!recipe) return;
+    for (const ing of recipe.nguyen_lieu) {
+      await query(
+        `UPDATE fridge_items
+         SET quantity = GREATEST(quantity - $3, 0), updated_at = NOW()
+         WHERE id = (
+           SELECT id FROM fridge_items
+           WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
+           ORDER BY expiration_date ASC
+           LIMIT 1
+         )`,
+        [Number(userId), ing.ten_nguyen_lieu, Number(ing.so_luong) || 1]
+      );
+    }
   }
 
   static async markCooked({ recipeId, userId }) {

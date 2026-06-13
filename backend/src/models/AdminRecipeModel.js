@@ -1,6 +1,6 @@
 const { query, pool } = require('../config/db');
 
-const RECIPE_COLUMNS = 'id, name_vi, name_en, description, instructions, prep_time, cook_time, servings, created_by, is_public, created_at, updated_at';
+const RECIPE_COLUMNS = 'id, name_vi, name_en, description, instructions, prep_time, cook_time, servings, created_by, is_public, image_url, created_at, updated_at';
 
 class AdminRecipeModel {
   static async list({ search = null } = {}) {
@@ -72,7 +72,7 @@ class AdminRecipeModel {
     return AdminRecipeModel._map(rows[0], ingredients);
   }
 
-  static async create({ name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients }) {
+  static async create({ name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients }) {
     // Uniqueness check
     const existing = await query(`SELECT id FROM recipes WHERE name_vi ILIKE $1`, [name_vi.trim()]);
     if (existing.rows.length > 0) throw new Error('Công thức món ăn này đã tồn tại.');
@@ -82,8 +82,8 @@ class AdminRecipeModel {
       await client.query('BEGIN');
 
       const { rows } = await client.query(
-        `INSERT INTO recipes (name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO recipes (name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id`,
         [
           name_vi.trim(),
@@ -95,6 +95,7 @@ class AdminRecipeModel {
           servings !== undefined && servings !== null ? Number(servings) : null,
           is_public !== undefined ? Boolean(is_public) : true,
           created_by !== undefined && created_by !== null ? Number(created_by) : null,
+          image_url ? String(image_url).trim() : null,
         ]
       );
       const recipe_id = rows[0].id;
@@ -111,7 +112,7 @@ class AdminRecipeModel {
     }
   }
 
-  static async update(id, { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, ingredients }) {
+  static async update(id, { name_vi, name_en, description, instructions, prep_time, cook_time, servings, is_public, created_by, image_url, ingredients }) {
     if (name_vi) {
       const existing = await query(`SELECT id FROM recipes WHERE name_vi ILIKE $1 AND id != $2`, [name_vi.trim(), id]);
       if (existing.rows.length > 0) throw new Error('Công thức món ăn này đã tồn tại.');
@@ -132,8 +133,9 @@ class AdminRecipeModel {
            servings     = COALESCE($7, servings),
            is_public    = COALESCE($8, is_public),
            created_by   = COALESCE($9, created_by),
+           image_url    = COALESCE($10, image_url),
            updated_at   = NOW()
-         WHERE id = $10`,
+         WHERE id = $11`,
         [
           name_vi ? name_vi.trim() : null,
           name_en ? name_en.trim() : null,
@@ -144,6 +146,7 @@ class AdminRecipeModel {
           servings !== undefined && servings !== null ? Number(servings) : null,
           is_public !== undefined ? Boolean(is_public) : null,
           created_by !== undefined && created_by !== null ? Number(created_by) : null,
+          image_url !== undefined && image_url !== null ? String(image_url).trim() : null,
           id,
         ]
       );
@@ -264,6 +267,7 @@ class AdminRecipeModel {
       servings: row.servings,
       created_by: row.created_by,
       is_public: row.is_public === true || row.is_public === 't',
+      image_url: row.image_url ?? null,
       created_at: row.created_at,
       updated_at: row.updated_at,
       ingredients,

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { db } from "@/lib/mockDb";
+import { adminNotificationApi } from "@/api/adminNotificationApi";
 
 export interface AdminNotification {
   id: string;
@@ -10,123 +10,78 @@ export interface AdminNotification {
   createdAt: string;
 }
 
+function mapNotificationType(type: string): AdminNotification["type"] {
+  if (type.includes("expir") || type.includes("error")) return "error";
+  if (type.includes("warn")) return "warning";
+  if (type.includes("success") || type.includes("complete")) return "success";
+  return "info";
+}
+
 interface NotificationStore {
   notifications: AdminNotification[];
   initialized: boolean;
-  addNotification: (notification: Omit<AdminNotification, "id" | "isRead" | "createdAt">) => void;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-  deleteNotification: (id: string) => void;
   initialize: () => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
 }
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
   initialized: false,
 
-  addNotification: (n) => {
-    const newNotif: AdminNotification = {
-      ...n,
-      id: `notif-${Math.random().toString(36).substring(2, 9)}`,
-      isRead: false,
-      createdAt: new Date().toISOString(),
-    };
-    set((state) => ({
-      notifications: [newNotif, ...state.notifications],
-    }));
-  },
-
-  markAsRead: (id) => {
-    set((state) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === id ? { ...n, isRead: true } : n
-      ),
-    }));
-  },
-
-  markAllAsRead: () => {
-    set((state) => ({
-      notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
-    }));
-  },
-
-  deleteNotification: (id) => {
-    set((state) => ({
-      notifications: state.notifications.filter((n) => n.id !== id),
-    }));
-  },
-
   initialize: async () => {
     if (get().initialized) return;
-
     try {
-      const state = await db();
-      const list: AdminNotification[] = [];
-
-      // 1. General System Welcome
-      list.push({
-        id: "sys-welcome",
-        title: "Hệ thống quản trị NAT-EAT",
-        message: "Hệ thống quản trị NATEAT Admin đã sẵn sàng hoạt động.",
-        type: "success",
-        isRead: false,
-        createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), // 2 hours ago
+      const { notifications } = await adminNotificationApi.list({ limit: 15, offset: 0 });
+      set({
+        notifications: notifications.map((n) => ({
+          id: String(n.id),
+          title: n.title,
+          message: n.message,
+          type: mapNotificationType(n.type),
+          isRead: Boolean(n.is_read),
+          createdAt: n.created_at ?? new Date().toISOString(),
+        })),
+        initialized: true,
       });
-
-      // 2. Add expiring/expired notifications from inventories
-      const today = new Date().toISOString().slice(0, 10);
-      state.fridge_items.forEach((item) => {
-        const food = state.foods.find((f) => f.food_id === item.food_id);
-        const family = state.families.find((f) => f.family_id === item.family_id);
-        if (!food || !family) return;
-
-        const expiryDate = item.expiry_date.slice(0, 10);
-        const diffTime = new Date(expiryDate).getTime() - new Date(today).getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (expiryDate < today) {
-          list.push({
-            id: `notif-expired-${item.fridge_item_id}`,
-            title: "Thực phẩm quá hạn sử dụng!",
-            message: `Hộ gia đình "${family.family_name}" có thực phẩm "${food.food_name}" (${item.location}) đã quá hạn sử dụng (${expiryDate}).`,
-            type: "error",
-            isRead: false,
-            createdAt: new Date(Date.now() - 30 * 60000).toISOString(), // 30 mins ago
-          });
-        } else if (diffDays <= 4) {
-          list.push({
-            id: `notif-expiring-${item.fridge_item_id}`,
-            title: "Thực phẩm sắp hết hạn",
-            message: `Hộ gia đình "${family.family_name}" có thực phẩm "${food.food_name}" (${item.location}) sắp hết hạn sử dụng (còn lại ${diffDays} ngày).`,
-            type: "warning",
-            isRead: false,
-            createdAt: new Date(Date.now() - 10 * 60000).toISOString(), // 10 mins ago
-          });
-        }
-      });
-
-      // 3. Add notifications from recent family activities
-      const sortedActivities = [...state.family_activities]
-        .sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-      sortedActivities.slice(0, 5).forEach((act) => {
-        const user = state.users.find((u) => u.user_id === act.user_id);
-        const family = state.families.find((f) => f.family_id === act.family_id);
-        if (!user || !family) return;
-
-        list.push({
-          id: `notif-activity-${act.id}`,
-          title: `Hoạt động gia đình: ${act.action_type === "shopping" ? "Mua sắm" : act.action_type === "fridge" ? "Tủ lạnh" : "Bữa ăn"}`,
-          message: `Thành viên "${user.full_name}" của gia đình "${family.family_name}" đã ${act.message}.`,
-          type: "info",
-          isRead: false,
-          createdAt: act.created_at,
-        });
-      });
-
-      set({ notifications: list, initialized: true });
     } catch (error) {
-      console.error("Failed to initialize notifications:", error);
+      console.error("Failed to load notifications:", error);
+    }
+  },
+
+  markAsRead: async (id) => {
+    try {
+      await adminNotificationApi.markAsRead(Number(id));
+      set((state) => ({
+        notifications: state.notifications.map((n) =>
+          n.id === id ? { ...n, isRead: true } : n
+        ),
+      }));
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
+  },
+
+  markAllAsRead: async () => {
+    try {
+      await adminNotificationApi.markAllAsRead();
+      set((state) => ({
+        notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+      }));
+    } catch (error) {
+      console.error("Failed to mark all as read:", error);
+    }
+  },
+
+  deleteNotification: async (id) => {
+    try {
+      await adminNotificationApi.delete(Number(id));
+      set((state) => ({
+        notifications: state.notifications.filter((n) => n.id !== id),
+      }));
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
     }
   },
 }));

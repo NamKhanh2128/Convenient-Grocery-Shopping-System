@@ -20,13 +20,16 @@ export function LoginPage() {
   const navigate = useNavigate();
   const login = useAdminAuthStore((state) => state.login);
   const signInWithGoogleRedirect = useAdminAuthStore((state) => state.signInWithGoogleRedirect);
-  const loading = useAdminAuthStore((state) => state.loading);
   const authError = useAdminAuthStore((state) => state.error);
   const t = useT();
   const remembered = useMemo(() => localStorage.getItem("nateat.remembered_email") ?? "", []);
   const [lockedOpen, setLockedOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Local submit state for the login action only. The store's global `loading`
+  // is owned by bootstrap (which never runs on /login), so relying on it would
+  // leave the button stuck on "Đang đăng nhập" after a full-page redirect here.
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
@@ -46,6 +49,7 @@ export function LoginPage() {
   });
 
   async function onSubmit(values: FormValues) {
+    setSubmitting(true);
     try {
       await login(values.email, values.password);
       if (values.remember) {
@@ -62,6 +66,8 @@ export function LoginPage() {
       } else {
         toast.error(message);
       }
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -181,10 +187,10 @@ export function LoginPage() {
             <Button
               type="submit"
               className="h-11 w-full rounded-[8px] bg-[#7655aa] hover:bg-[#67489a] font-bold text-white transition-all duration-200 flex items-center justify-center gap-2"
-              disabled={!isValid || loading}
+              disabled={!isValid || submitting}
             >
               <LogIn className="h-4 w-4 shrink-0" />
-              {loading ? t("loginLoading") : t("loginButton")}
+              {submitting ? t("loginLoading") : t("loginButton")}
             </Button>
           </form>
 

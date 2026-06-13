@@ -43,9 +43,11 @@ export const translations = {
     all: "Tất cả",
 
     // Admin nav (standardized dot keys)
-    "navigation.dashboard": "Dashboard",
+    "navigation.dashboard": "Thống kê",
     "navigation.users": "Người dùng",
     "navigation.families": "Nhóm gia đình",
+    "navigation.foodCategories": "Loại thực phẩm",
+    "navigation.units": "Đơn vị tính",
     "navigation.shoppingLists": "Danh sách mua sắm",
     "navigation.mealPlans": "Kế hoạch bữa ăn",
     "navigation.notifications": "Thông báo",
@@ -58,7 +60,7 @@ export const translations = {
     "navigation.settings": "Cài đặt",
 
     // Page titles (standardized dot keys)
-    "page.dashboard.title": "Tổng quan hệ thống",
+    "page.dashboard.title": "Thống kê hệ thống",
     "page.users.title": "Quản lý người dùng",
     "page.families.title": "Quản lý nhóm gia đình",
     "page.foods.title": "Quản lý thực phẩm",
@@ -206,9 +208,11 @@ export const translations = {
     all: "All",
 
     // Admin nav (standardized dot keys)
-    "navigation.dashboard": "Dashboard",
+    "navigation.dashboard": "Statistics",
     "navigation.users": "Users",
     "navigation.families": "Family Groups",
+    "navigation.foodCategories": "Food Categories",
+    "navigation.units": "Units",
     "navigation.shoppingLists": "Shopping Lists",
     "navigation.mealPlans": "Meal Plans",
     "navigation.notifications": "Notifications",
@@ -221,7 +225,7 @@ export const translations = {
     "navigation.settings": "Settings",
 
     // Page titles (standardized dot keys)
-    "page.dashboard.title": "System Overview",
+    "page.dashboard.title": "System Statistics",
     "page.users.title": "User Management",
     "page.families.title": "Family Group Management",
     "page.foods.title": "Food Management",
@@ -358,9 +362,11 @@ export const translations = {
     all: "すべて",
 
     // Admin nav (standardized dot keys)
-    "navigation.dashboard": "ダッシュボード",
+    "navigation.dashboard": "統計",
     "navigation.users": "ユーザー",
     "navigation.families": "ファミリーグループ",
+    "navigation.foodCategories": "食品カテゴリ",
+    "navigation.units": "単位",
     "navigation.shoppingLists": "ショッピングリスト",
     "navigation.mealPlans": "ミールプラン",
     "navigation.notifications": "通知",
@@ -373,7 +379,7 @@ export const translations = {
     "navigation.settings": "設定",
 
     // Page titles (standardized dot keys)
-    "page.dashboard.title": "システム概要",
+    "page.dashboard.title": "システム統計",
     "page.users.title": "ユーザー管理",
     "page.families.title": "ファミリーグループ管理",
     "page.foods.title": "食品管理",

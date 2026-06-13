@@ -23,14 +23,14 @@ class ShoppingService {
     return foodId ? `Mặt hàng #${foodId}` : 'Nguyên liệu';
   }
 
-  async _resolveItemIds(item) {
+  async _resolveItemIds(item, food = null) {
     let unitId = item.unit_id ? Number(item.unit_id) : null;
-    if (!unitId && item.unit) {
-      unitId = await bridge.getDefaultUnitId(item.unit);
-    }
+    if (!unitId && item.unit) unitId = await bridge.getDefaultUnitId(item.unit);
+    if (!unitId && food?.unit_id) unitId = food.unit_id;
     if (!unitId) unitId = await bridge.getDefaultUnitId('g');
 
     let categoryId = item.category_id ? Number(item.category_id) : null;
+    if (!categoryId && food?.category_id) categoryId = food.category_id;
     if (!categoryId) categoryId = await bridge.getDefaultCategoryId();
 
     return { unitId, categoryId };
@@ -53,7 +53,7 @@ class ShoppingService {
       purchased_by: item.purchased_by != null ? String(item.purchased_by) : null,
       purchased_at: item.purchased_at,
       bought_quantity: Number(item.bought_quantity || 0),
-      remaining_quantity: Number(item.remaining_quantity || item.quantity),
+      remaining_quantity: item.remaining_quantity != null ? Number(item.remaining_quantity) : Number(item.quantity),
       item_status: item.item_status || 'PENDING',
       inventory_synced_quantity: Number(item.inventory_synced_quantity || 0),
       bought_status: Boolean(item.bought_status),
@@ -122,18 +122,24 @@ class ShoppingService {
     });
 
     for (const item of items) {
-      const { unitId, categoryId } = await this._resolveItemIds(item);
       let foodId = item.food_id ? Number(item.food_id) : null;
-      if (!foodId && item.food_name) {
-        const existing = await ShoppingModel.findFoodByName(item.food_name);
-        if (existing) foodId = existing.id;
-        else foodId = await ShoppingModel.insertFood({
-          foodName: item.food_name,
-          unitId,
-          categoryId,
-        });
+      let food = null;
+
+      if (foodId) {
+        food = await ShoppingModel.findFoodById(foodId);
+      } else if (item.food_name) {
+        food = await ShoppingModel.findFoodByName(item.food_name);
+        if (food) {
+          foodId = food.id;
+        } else {
+          const { unitId: tmpUnit, categoryId: tmpCat } = await this._resolveItemIds(item);
+          foodId = await ShoppingModel.insertFood({ foodName: item.food_name, unitId: tmpUnit, categoryId: tmpCat });
+          food = await ShoppingModel.findFoodById(foodId);
+        }
       }
+
       if (!foodId) throw new Error(`Mặt hàng "${item.food_name || item.food_id}" không hợp lệ.`);
+      const { unitId, categoryId } = await this._resolveItemIds(item, food);
       const itemName = await this._resolveItemDisplayName(item, foodId);
       await ShoppingModel.insertItem({
         shoppingListId: listId,
@@ -171,19 +177,25 @@ class ShoppingService {
       throw new Error('Bạn không có quyền chỉnh sửa danh sách này.');
     }
 
-    const { unitId, categoryId } = await this._resolveItemIds({ unit_id, category_id, unit });
     let foodId = food_id ? Number(food_id) : null;
-    if (!foodId && food_name) {
-      const existing = await ShoppingModel.findFoodByName(food_name);
-      if (existing) foodId = existing.id;
-      else foodId = await ShoppingModel.insertFood({
-        foodName: food_name,
-        unitId,
-        categoryId,
-      });
+    let food = null;
+
+    if (foodId) {
+      food = await ShoppingModel.findFoodById(foodId);
+    } else if (food_name) {
+      food = await ShoppingModel.findFoodByName(food_name);
+      if (food) {
+        foodId = food.id;
+      } else {
+        const { unitId: tmpUnit, categoryId: tmpCat } = await this._resolveItemIds({ unit_id, category_id, unit });
+        foodId = await ShoppingModel.insertFood({ foodName: food_name, unitId: tmpUnit, categoryId: tmpCat });
+        food = await ShoppingModel.findFoodById(foodId);
+      }
     }
+
     if (!foodId) throw new Error('Vui lòng cung cấp food_id hoặc food_name để thêm mặt hàng.');
 
+    const { unitId, categoryId } = await this._resolveItemIds({ unit_id, category_id, unit }, food);
     const itemName = await this._resolveItemDisplayName({ food_name, name: food_name }, foodId);
     const itemId = await ShoppingModel.insertItem({
       shoppingListId: listId,
@@ -257,6 +269,7 @@ class ShoppingService {
       itemStatus,
       isPurchased,
       inventorySyncedQuantity,
+      userId != null ? Number(userId) : null,
     );
 
     const updatedItems = await ShoppingModel.listItems(listId);
@@ -296,6 +309,26 @@ class ShoppingService {
     await ShoppingModel.updateListStatus(listId, 'completed');
     const fresh = await this.getListDetail(listId, userFamilyId);
     return fresh;
+  }
+
+  async updateItem(listId, itemId, { quantity }, userFamilyId) {
+    const list = await ShoppingModel.findById(listId);
+    if (!list) throw new Error('Không tìm thấy danh sách.');
+    if (Number(list.group_id) !== Number(userFamilyId)) {
+      throw new Error('Bạn không có quyền chỉnh sửa danh sách này.');
+    }
+    const q = Number(quantity);
+    if (!Number.isFinite(q) || q <= 0) throw new Error('Số lượng phải lớn hơn 0.');
+
+    const items = await ShoppingModel.listItems(listId);
+    const item = items.find((i) => i.id === Number(itemId));
+    if (!item) throw new Error('Không tìm thấy mặt hàng.');
+
+    await ShoppingModel.updateItemQuantity(Number(itemId), q);
+
+    const detail = await this.getListDetail(listId, userFamilyId);
+    const updated = detail.items.find((i) => String(i.id) === String(itemId));
+    return { list: detail, item: updated };
   }
 
   async deleteList(listId, userFamilyId) {

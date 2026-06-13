@@ -4,17 +4,19 @@ import { recipeApi, type RecipeDetail, type RecipeListFilters } from "@/modules/
 interface RecipeState {
   recipes: RecipeDetail[];
   favorites: RecipeDetail[];
+  popular: RecipeDetail[];
   categories: Array<{ id: string; ten: string }>;
   loading: boolean;
   error: string | null;
   search: string;
-  categoryId: string;
+  timeTag: string;
   privacy: string;
 
   setSearch: (value: string) => void;
-  setCategoryId: (value: string) => void;
+  setTimeTag: (value: string) => void;
   setPrivacy: (value: string) => void;
   load: (familyId: string) => Promise<void>;
+  loadPopular: (familyId: string) => Promise<void>;
   loadFavorites: (familyId: string) => Promise<void>;
   remove: (id: string, familyId: string) => Promise<void>;
   toggleFavorite: (id: string, favorite: boolean, familyId?: string) => Promise<void>;
@@ -23,7 +25,7 @@ interface RecipeState {
 function currentFilters(state: RecipeState): RecipeListFilters {
   return {
     search: state.search,
-    categoryId: state.categoryId,
+    timeTag: state.timeTag,
     privacy: state.privacy,
   };
 }
@@ -31,15 +33,16 @@ function currentFilters(state: RecipeState): RecipeListFilters {
 export const useRecipeStore = create<RecipeState>((set, get) => ({
   recipes: [],
   favorites: [],
+  popular: [],
   categories: [],
   loading: false,
   error: null,
   search: "",
-  categoryId: "all",
+  timeTag: "all",
   privacy: "all",
 
   setSearch: (value) => set({ search: value }),
-  setCategoryId: (value) => set({ categoryId: value }),
+  setTimeTag: (value) => set({ timeTag: value }),
   setPrivacy: (value) => set({ privacy: value }),
 
   load: async (familyId) => {
@@ -53,6 +56,15 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
         loading: false,
         error: error instanceof Error ? error.message : "Không tải được công thức",
       });
+    }
+  },
+
+  loadPopular: async (familyId) => {
+    try {
+      const popular = await recipeApi.popular(familyId, 6);
+      set({ popular });
+    } catch {
+      set({ popular: [] });
     }
   },
 

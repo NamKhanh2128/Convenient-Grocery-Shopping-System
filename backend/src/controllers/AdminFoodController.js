@@ -12,6 +12,17 @@ class AdminFoodController {
     }
   }
 
+  static async getById(req, res) {
+    try {
+      const food = await AdminFoodModel.getById(req.params.id);
+      if (!food) return res.status(404).json({ success: false, message: 'Không tìm thấy thực phẩm.' });
+      return res.status(200).json({ success: true, data: food });
+    } catch (err) {
+      console.error('[AdminFood.getById]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server khi lấy thông tin thực phẩm.' });
+    }
+  }
+
   static async create(req, res) {
     try {
       const { food_name, category_id, unit_id, icon } = req.body;

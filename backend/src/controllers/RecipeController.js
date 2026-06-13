@@ -71,10 +71,9 @@ class RecipeController {
       const [recipes, categories] = await Promise.all([
         RecipeModel.findAccessible({
           userId,
-          familyGroupId,
           search: req.query.search || null,
-          categoryId: req.query.categoryId || null,
           privacy: req.query.privacy || null,
+          timeTag: req.query.timeTag || null,
           limit: Number(req.query.limit) || 100,
           offset: Number(req.query.offset) || 0,
           lite,
@@ -174,6 +173,18 @@ class RecipeController {
     } catch (error) {
       console.error('[RecipeController.remove]', error);
       return res.status(400).json({ success: false, message: error.message || 'Không thể xóa công thức' });
+    }
+  }
+
+  static async popular(req, res) {
+    try {
+      const { userId } = getUserContext(req);
+      if (!userId) return res.status(400).json({ success: false, message: 'Thiếu userId' });
+      const recipes = await RecipeModel.getPopular({ userId, limit: Number(req.query.limit) || 5 });
+      return res.status(200).json({ success: true, data: { recipes }, message: 'OK' });
+    } catch (error) {
+      console.error('[RecipeController.popular]', error);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
     }
   }
 

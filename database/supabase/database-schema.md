@@ -15,15 +15,22 @@ Stores user account information.
 |--------|------|----------|-------------|
 | id | integer | NO | Primary key, unique user identifier |
 | email | character varying | NO | Login email (unique) |
-| password_hash | character varying | NO | Bcrypt hashed password |
+| password_hash | character varying | YES | Bcrypt hashed password (NULL for Google-only accounts) |
+| password_plain | character varying | YES | ⚠️ Plaintext password (development/debug only — **never use in production**; remove before any real deployment) |
 | full_name | character varying | NO | User's full name |
 | phone | character varying | YES | Contact phone number |
-| role | character varying | YES | User role (e.g., `user`, `admin`) |
-| is_locked | boolean | YES | Account lock status |
-| failed_login_attempts | integer | YES | Track failed login attempts |
+| role | character varying | YES | User role — CHECK (`user`, `admin`), default `user` |
+| is_locked | boolean | YES | Account lock status (default `false`) |
+| failed_login_attempts | integer | YES | Track failed login attempts (default `0`) |
 | last_login | timestamp without time zone | YES | Last login timestamp |
+| google_id | character varying | YES | Google account id (UNIQUE) for OAuth login |
+| avatar_url | character varying | YES | Profile picture URL (from Google or profile update) |
+| auth_provider | character varying | NO | Auth source — `local` or `google` (default `local`) |
 | created_at | timestamp without time zone | YES | Account creation time |
 | updated_at | timestamp without time zone | YES | Last update time |
+
+> **CHECK:** `role IN ('user', 'admin')`.
+> **Note:** `google_id`, `avatar_url`, `auth_provider` and the `password_hash` NULL allowance are added lazily at runtime by `ensureOAuthSchema()` in `authService.js` (idempotent `ADD COLUMN IF NOT EXISTS`).
 
 ---
 
@@ -48,6 +55,20 @@ Stores user refresh tokens for authentication.
 | created_at | timestamp without time zone | NO | Token creation time |
 | expires_at | timestamp without time zone | NO | Token expiry time |
 | revoked | boolean | NO | Whether the token has been revoked |
+
+---
+
+### 3b. password_reset_tokens
+Stores hashed, single-use password-reset tokens. Created lazily at runtime by `ensurePasswordResetSchema()` in `authService.js` (so it may not exist until the first "forgot password" request).
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| id | integer | NO | Primary key |
+| user_id | integer | NO | Foreign key → users.id (ON DELETE CASCADE) |
+| token_hash | character varying(64) | NO | SHA-256 hash of the reset token (UNIQUE) |
+| expires_at | timestamp without time zone | NO | Token expiry (default 60 minutes) |
+| used_at | timestamp without time zone | YES | When the token was consumed (NULL = unused) |
+| created_at | timestamp without time zone | NO | Creation time |
 
 ---
 
@@ -86,10 +107,13 @@ Tracks invitations sent between users for joining family groups.
 | id | integer | NO | Primary key |
 | group_id | integer | NO | Foreign key → family_groups.id |
 | inviter_user_id | integer | NO | Foreign key → users.id (sender) |
-| invited_user_id | integer | NO | Foreign key → users.id (recipient) |
-| status | character varying | NO | Invitation status (e.g., `pending`, `accepted`, `declined`) |
+| invited_user_id | integer | YES | Foreign key → users.id (recipient; NULL when inviting an email that has no account yet) |
+| status | character varying | NO | Invitation status (e.g., `pending`, `accepted`, `rejected`), default `pending` |
 | created_at | timestamp without time zone | YES | Invitation creation time |
 | responded_at | timestamp without time zone | YES | Time when recipient responded |
+| invited_email | character varying | YES | Email invited (used for invite-by-email before the user registers) |
+| token_hash | character varying | YES | Hash of the email-invitation acceptance token |
+| expires_at | timestamp without time zone | YES | Invitation token expiry (≈ 7 days) |
 
 ---
 
@@ -142,7 +166,7 @@ Stores food items currently in a user's fridge/pantry.
 | unit_id | integer | NO | Foreign key → units.id |
 | category_id | integer | NO | Foreign key → food_categories.id |
 | expiration_date | date | NO | Expiration date |
-| storage_location | character varying | YES | Storage location (e.g., `freezer`, `fridge`, `door`) |
+| storage_location | character varying | YES | Storage code — CHECK (`freezer`, `fridge`, `door`), default `fridge`. See VN↔EN mapping note below |
 | added_at | timestamp without time zone | YES | When the item was added |
 | updated_at | timestamp without time zone | YES | Last update time |
 
@@ -216,6 +240,7 @@ Stores recipe information.
 | servings | integer | YES | Number of servings |
 | created_by | integer | YES | Foreign key → users.id (NULL = system recipe) |
 | is_public | boolean | YES | Whether visible to all users |
+| image_url | character varying | YES | Cover photo URL (Unsplash CDN or other) |
 | created_at | timestamp without time zone | YES | Creation time |
 | updated_at | timestamp without time zone | YES | Last update time |
 
@@ -348,6 +373,34 @@ recipe_ingredients (n) ──── (1) food_categories   (optional)
 
 meal_plans (1) ──── (n) meal_plan_items
 ```
+
+---
+
+## CHECK Constraints (enumerations)
+
+These columns are restricted by DB `CHECK` constraints. The API/UI **must** send exactly these values — sending other strings (e.g. Vietnamese labels) raises a constraint-violation error.
+
+| Table.Column | Allowed values |
+|--------------|----------------|
+| users.role | `user`, `admin` |
+| fridge_items.storage_location | `freezer`, `fridge`, `door` |
+| meal_plans.plan_type | `daily`, `weekly` |
+| meal_plans.status | `draft`, `active`, `completed` |
+| meal_plan_items.meal_type | `breakfast`, `lunch`, `dinner`, `snack` |
+| shopping_lists.list_type | `daily`, `weekly` |
+| shopping_lists.status | `active`, `completed`, `cancelled` |
+| shopping_list_items.item_status | `PENDING`, `PARTIAL`, `COMPLETED` |
+| notifications.type | `expiration`, `meal_reminder`, `shopping_update`, `system` |
+
+### Storage-location VN ↔ EN mapping
+
+The UI uses Vietnamese labels while the DB stores English codes. `FridgeItemModel` translates at the model boundary (write VN→EN, read EN→VN):
+
+| UI label (VN) | DB code (EN) |
+|---------------|--------------|
+| Ngăn mát | `fridge` |
+| Ngăn đông / Ngăn đá | `freezer` |
+| Kệ thường / Cửa tủ / Cánh tủ / Ngoài tủ | `door` |
 
 ---
 

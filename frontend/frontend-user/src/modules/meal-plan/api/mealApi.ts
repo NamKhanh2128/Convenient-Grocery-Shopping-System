@@ -9,6 +9,7 @@ import { db, saveDb } from "@/shared/lib/mockDb";
 import { recipeApi } from "@/modules/recipe/api/recipeApi";
 
 import { shoppingApi } from "@/modules/shopping/api/shoppingApi";
+import { todayIso } from "@/shared/utils/date";
 
 
 
@@ -27,6 +28,8 @@ type BackendMealPlan = {
   meal_type: MealPlan["meal_type"];
 
   recipe_id: string;
+
+  is_cooked?: boolean;
 
 };
 
@@ -52,11 +55,15 @@ function groupMeals(rows: MealPlan[]): MealPlanGroup[] {
 
         recipe_ids: [],
 
+        cooked_recipe_ids: [],
+
       });
 
     }
 
     map.get(key)!.recipe_ids.push(row.recipe_id);
+
+    if (row.is_cooked) map.get(key)!.cooked_recipe_ids!.push(row.recipe_id);
 
   });
 
@@ -240,6 +247,97 @@ export const mealApi = {
 
 
 
+  async markCooked(family_id: string, meal_date: string, meal_type: MealPlan["meal_type"], recipe_id: string, is_cooked: boolean) {
+
+    if (useMealBackend) {
+
+      const result = unwrapApiData<{ can_cook?: boolean; missing?: Array<{ food_name: string; quantity: number; unit: string }> }>(
+
+        await apiClient.patch("/meal-plans/cook", {
+
+          familyGroupId: family_id,
+
+          meal_date,
+
+          meal_type,
+
+          recipe_id,
+
+          is_cooked,
+
+        }),
+
+      );
+
+      if (result?.can_cook === false) {
+
+        const err = Object.assign(new Error("MISSING_INGREDIENTS"), { missing: result.missing ?? [] });
+
+        throw err;
+
+      }
+
+      return;
+
+    }
+
+    // Mock: no-op (is_cooked not stored in mock db)
+
+  },
+
+
+
+  async getMissingIngredients(
+    family_id: string,
+    from: string,
+    to: string,
+  ): Promise<Array<{ food_name: string; quantity: number; unit: string }>> {
+    if (useMealBackend) {
+      const data = unwrapApiData<{ missing: Array<{ food_name: string; quantity: number; unit: string }> }>(
+        await apiClient.get("/meal-plans/missing-ingredients", {
+          params: { familyGroupId: family_id, from, to },
+        }),
+      );
+      return data.missing;
+    }
+    return [];
+  },
+
+  async createShoppingFromPlan(
+    family_id: string,
+    user_id: string,
+    missing: Array<{ food_name: string; quantity: number; unit: string }>,
+  ) {
+    if (!missing.length) throw new Error("Không có nguyên liệu thiếu để tạo danh sách mua.");
+    return shoppingApi.create({
+      family_id,
+      title: "Nguyên liệu thiếu từ kế hoạch bữa ăn",
+      plan_date: todayIso(),
+      list_type: "daily",
+      created_by: user_id,
+      items: missing.map((m) => ({
+        food_name: m.food_name,
+        quantity: m.quantity,
+        unit: m.unit as FoodUnit,
+        category: "Khác" as FoodCategory,
+      })),
+    });
+  },
+
+  async autoGenerate(family_id: string, mode: "day" | "week", anchorDate: string, overwrite = false) {
+    if (useMealBackend) {
+      unwrapApiData(
+        await apiClient.post("/meal-plans/auto-generate", {
+          familyGroupId: family_id,
+          mode,
+          date: anchorDate,
+          overwrite,
+        }),
+      );
+      return;
+    }
+  },
+
   async createShoppingListForMissing(family_id: string, user_id: string, title: string) {
 
     const suggestions = await recipeApi.suggestions(family_id);
@@ -269,7 +367,7 @@ export const mealApi = {
 
       title,
 
-      plan_date: new Date().toISOString().slice(0, 10),
+      plan_date: todayIso(),
 
       list_type: "daily",
 

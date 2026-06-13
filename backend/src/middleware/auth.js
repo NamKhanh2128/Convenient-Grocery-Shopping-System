@@ -4,11 +4,31 @@ const { query } = require('../config/db');
 const ShoppingModel = require('../models/ShoppingModel');
 const FridgeItemModel = require('../models/FridgeItemModel');
 
+// Cached entries carry an expiry so that family-membership changes (join /
+// leave / transfer) are picked up within AUTH_USER_CACHE_TTL_MS instead of
+// living forever until the next server restart.
+const USER_CACHE_TTL_MS = Number(process.env.AUTH_USER_CACHE_TTL_MS || 60000);
 const mockUserCache = new Map();
 const jwtUserCache = new Map();
 
+function getCachedUser(cache, key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedUser(cache, key, value) {
+  cache.set(key, { value, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+  return value;
+}
+
 async function resolveMockUser(token) {
-  if (mockUserCache.has(token)) return mockUserCache.get(token);
+  const cached = getCachedUser(mockUserCache, token);
+  if (cached) return cached;
   const mockId = token.slice('mock-token-'.length);
   const user_id = await bridge.resolveShoppingUserId(mockId);
   const family_id = await bridge.resolveShoppingGroupId('family-1');
@@ -32,13 +52,13 @@ async function resolveMockUser(token) {
     full_name: dbUser?.full_name || 'Dev User',
     role: String(dbUser?.role || 'user').toUpperCase(),
   };
-  mockUserCache.set(token, user);
-  return user;
+  return setCachedUser(mockUserCache, token, user);
 }
 
 async function enrichJwtUser(decoded) {
   const cacheKey = String(decoded.user_id ?? decoded.id ?? decoded.sub ?? '');
-  if (jwtUserCache.has(cacheKey)) return jwtUserCache.get(cacheKey);
+  const cached = getCachedUser(jwtUserCache, cacheKey);
+  if (cached) return cached;
 
   const user_id = decoded.user_id ?? decoded.id;
   let family_id = decoded.family_id ?? decoded.family_group_id ?? null;
@@ -58,8 +78,7 @@ async function enrichJwtUser(decoded) {
     family_group_id: family_id,
     gia_dinh_id,
   };
-  jwtUserCache.set(cacheKey, user);
-  return user;
+  return setCachedUser(jwtUserCache, cacheKey, user);
 }
 
 function authRequired(req, res, next) {

@@ -58,7 +58,32 @@ export const useAdminAuthStore = create<AdminAuthState>((set) => ({
         set({ user: null, loading: false });
         return;
       }
-      const data = await http.get<{ user: AdminUser }>("/auth/me");
+
+      let data: { user: AdminUser };
+      try {
+        data = await http.get<{ user: AdminUser }>("/auth/me");
+      } catch {
+        // Access token likely expired — try the 7-day refresh token once before
+        // giving up. /auth/* endpoints don't auto-refresh in the http client, so
+        // we drive it explicitly here.
+        const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+        if (!refreshToken) {
+          clearSession();
+          set({ user: null, loading: false });
+          return;
+        }
+        const refreshed = await http
+          .post<AuthResponse>("/auth/refresh", { refreshToken })
+          .catch(() => null);
+        if (!refreshed?.accessToken) {
+          clearSession();
+          set({ user: null, loading: false });
+          return;
+        }
+        setSession({ token: refreshed.accessToken, user_id: session.user_id });
+        data = await http.get<{ user: AdminUser }>("/auth/me");
+      }
+
       // ⚠️ Must be ADMIN role
       if (!data.user || data.user.role !== "ADMIN") {
         clearSession();

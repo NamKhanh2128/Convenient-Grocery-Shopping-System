@@ -13,8 +13,15 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      // Forward all /api/* requests to the Express backend in development
+      // Forward API and auth requests to the Express backend in development
       "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        secure: false,
+      },
+      // Auth calls (login, me, logout, ...) hit bare /auth/* — the backend
+      // mounts authRoutes at both /auth and /api/auth, so forward these too.
+      "/auth": {
         target: "http://localhost:3000",
         changeOrigin: true,
         secure: false,

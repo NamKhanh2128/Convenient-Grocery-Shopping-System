@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Edit2, Trash2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { adminFoodApi, type FoodWithMeta } from "@/api/adminFoodApi";
-import { foodCategories } from "@/constants/options";
+import { adminFoodCategoryApi } from "@/api/adminFoodCategoryApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { FilterBar, type FilterConfig } from "@/components/shared/FilterBar";
@@ -18,6 +18,7 @@ export function FoodListPage() {
 
   // States
   const [foods, setFoods] = useState<FoodWithMeta[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
@@ -34,8 +35,14 @@ export function FoodListPage() {
   const loadFoods = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await adminFoodApi.list();
+      const [data, categories] = await Promise.all([
+        adminFoodApi.list(),
+        adminFoodCategoryApi.list(),
+      ]);
       setFoods(data);
+      setCategoryOptions(
+        categories.map((c) => ({ label: c.name_vi, value: c.name_vi }))
+      );
     } catch (error) {
       toast.error("Không thể tải danh sách thực phẩm.");
     } finally {
@@ -112,7 +119,7 @@ export function FoodListPage() {
       onChange: setFilterCategory,
       options: [
         { label: "Tất cả danh mục", value: "ALL" },
-        ...foodCategories.map((c) => ({ label: c, value: c })),
+        ...categoryOptions,
       ],
     },
   ];

@@ -32,22 +32,30 @@ export function StatisticsPage() {
   const [trends, setTrends] = useState<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] } | null>(null);
   const [waste, setWaste] = useState<{ expiredItems: ExpiredItem[]; activeCount: number; expiredCount: number; wasteRatio: number } | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [ov, daily, catBar, tr, ws] = await Promise.all([
-        statisticsApi.getOverview(family.family_id),
-        statisticsApi.getDailyActivity(family.family_id),
-        statisticsApi.getCategoryBar(family.family_id),
-        statisticsApi.getFoodTrends(family.family_id),
-        statisticsApi.getWasteReport(family.family_id),
-      ]);
-      setOverview(ov);
-      setDailyData(daily);
-      setCategoryBar(catBar);
-      setTrends(tr);
-      setWaste(ws);
-      setLoading(false);
+      setError(null);
+      try {
+        const [ov, daily, catBar, tr, ws] = await Promise.all([
+          statisticsApi.getOverview(family.family_id),
+          statisticsApi.getDailyActivity(family.family_id),
+          statisticsApi.getCategoryBar(family.family_id),
+          statisticsApi.getFoodTrends(family.family_id),
+          statisticsApi.getWasteReport(family.family_id),
+        ]);
+        setOverview(ov);
+        setDailyData(daily);
+        setCategoryBar(catBar);
+        setTrends(tr);
+        setWaste(ws);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không tải được dữ liệu thống kê");
+      } finally {
+        setLoading(false);
+      }
     }
     void load();
   }, [family.family_id]);
@@ -77,7 +85,11 @@ export function StatisticsPage() {
         ))}
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="rounded-[8px] border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+          {error}
+        </div>
+      ) : loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="h-24 animate-pulse rounded-[8px] bg-white shadow-card" />

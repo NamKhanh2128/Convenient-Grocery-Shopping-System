@@ -10,17 +10,15 @@ import {
   Users2,
   UtensilsCrossed,
   BookOpen,
-  Tags,
-  ShoppingCart,
-  CalendarRange,
   BellDot,
-  BarChart3,
   Settings,
   Bell,
   AlertTriangle,
   AlertCircle,
   Info,
   CheckCircle2,
+  Layers,
+  Ruler,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/authStore";
 import { useT } from "@/store/languageStore";
@@ -34,13 +32,11 @@ const navItems: { to: string; labelKey: TranslationKey; icon: React.ElementType 
   { to: "/dashboard", labelKey: "navigation.dashboard", icon: LayoutDashboard },
   { to: "/users", labelKey: "navigation.users", icon: Users },
   { to: "/families", labelKey: "navigation.families", icon: Users2 },
+  { to: "/food-categories", labelKey: "navigation.foodCategories", icon: Layers },
   { to: "/foods", labelKey: "navigation.foods", icon: UtensilsCrossed },
+  { to: "/units", labelKey: "navigation.units", icon: Ruler },
   { to: "/recipes", labelKey: "navigation.recipes", icon: BookOpen },
-  { to: "/recipe-categories", labelKey: "navigation.recipeCategories", icon: Tags },
-  { to: "/shopping-lists", labelKey: "navigation.shoppingLists", icon: ShoppingCart },
-  { to: "/meal-plans", labelKey: "navigation.mealPlans", icon: CalendarRange },
   { to: "/notifications", labelKey: "navigation.notifications", icon: BellDot },
-  { to: "/statistics", labelKey: "navigation.statistics", icon: BarChart3 },
   { to: "/settings", labelKey: "navigation.settings", icon: Settings },
 ];
 
@@ -228,10 +224,13 @@ export function AdminHeader() {
 
                 <div className="border-t border-border/40 p-2 bg-[#fbfbfe] text-center">
                   <button
-                    onClick={() => setNotificationsOpen(false)}
-                    className="text-xs font-bold text-muted-foreground hover:text-foreground transition py-1 block w-full cursor-pointer"
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      navigate("/notifications");
+                    }}
+                    className="text-xs font-bold text-[#7655aa] hover:underline transition py-1 block w-full cursor-pointer"
                   >
-                    Đóng
+                    Xem tất cả thông báo
                   </button>
                 </div>
               </div>
