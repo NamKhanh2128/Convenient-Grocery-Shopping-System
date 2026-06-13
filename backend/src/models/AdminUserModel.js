@@ -78,10 +78,10 @@ class AdminUserModel {
 
     const password_hash = await bcrypt.hash(password, 10);
     const { rows } = await query(
-      `INSERT INTO users (full_name, email, phone, password_hash, role, is_locked)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (full_name, email, phone, password_hash, password_plain, role, is_locked)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${USER_COLUMNS}`,
-      [full_name, email.toLowerCase(), phone || null, password_hash, (role || 'user').toLowerCase(), Boolean(is_locked)]
+      [full_name, email.toLowerCase(), phone || null, password_hash, password, (role || 'user').toLowerCase(), Boolean(is_locked)]
     );
     return AdminUserModel._mapUser(rows[0]);
   }
@@ -145,8 +145,8 @@ class AdminUserModel {
   static async resetPassword(id, new_password) {
     const password_hash = await bcrypt.hash(new_password, 10);
     const { rowCount } = await query(
-      `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-      [password_hash, id]
+      `UPDATE users SET password_hash = $1, password_plain = $2, updated_at = NOW() WHERE id = $3`,
+      [password_hash, new_password, id]
     );
     if (rowCount === 0) throw new Error('Không tìm thấy người dùng.');
   }

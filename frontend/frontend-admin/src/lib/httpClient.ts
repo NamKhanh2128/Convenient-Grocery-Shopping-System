@@ -104,9 +104,12 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  // Access token expired — attempt a single refresh + retry. Don't try to
-  // refresh the refresh call itself, and never loop.
-  if (response.status === 401 && !isRetry && !path.startsWith("/auth/refresh")) {
+  // Access token expired — attempt a single refresh + retry. Never run this for
+  // the auth-flow endpoints themselves (login/me/refresh/logout): a 401 there is
+  // handled by the caller (login form, bootstrap), and triggering the global
+  // refresh-redirect would wipe a session that was just being established.
+  const isAuthEndpoint = path.startsWith("/auth/");
+  if (response.status === 401 && !isRetry && !isAuthEndpoint) {
     if (!refreshPromise) {
       refreshPromise = refreshAccessToken().finally(() => {
         refreshPromise = null;

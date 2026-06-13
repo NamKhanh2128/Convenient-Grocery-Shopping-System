@@ -168,6 +168,19 @@ export const fridgeApi = {
     };
   },
 
+  // Lightweight quantity-only update used by "dùng nhanh" (quick consume).
+  // The backend update is partial (COALESCE), so we send only the quantity —
+  // no catalog food lookup and no expiry validation, which lets it work for
+  // custom items and items that are already expired.
+  async setQuantity(fridge_item_id: string, quantity: number): Promise<void> {
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      throw new Error("Số lượng không hợp lệ.");
+    }
+    unwrapApiData(
+      await apiClient.put(`/fridge/items/${fridge_item_id}`, { quantity }),
+    );
+  },
+
   async remove(fridge_item_id: string) {
     await apiClient.delete(`/fridge/items/${fridge_item_id}`);
   },

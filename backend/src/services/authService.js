@@ -47,6 +47,7 @@ function ensureOAuthSchema() {
       ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS google_id VARCHAR UNIQUE;
       ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS avatar_url VARCHAR;
       ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS auth_provider VARCHAR NOT NULL DEFAULT 'local';
+      ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS password_plain VARCHAR;
       ALTER TABLE ${u.table} ALTER COLUMN ${u.password} DROP NOT NULL;
     `);
   }
@@ -214,12 +215,12 @@ async function findUserByIdWithPassword(userId) {
   return rows[0] || null;
 }
 
-async function updateUserPassword(userId, passwordHash) {
+async function updateUserPassword(userId, passwordHash, passwordPlain = null) {
   await pool.query(
     `UPDATE ${u.table}
-     SET ${u.password} = $2, failed_login_attempts = 0, is_locked = false
+     SET ${u.password} = $2, password_plain = $3, failed_login_attempts = 0, is_locked = false
      WHERE ${u.id} = $1`,
-    [userId, passwordHash]
+    [userId, passwordHash, passwordPlain]
   );
 }
 
@@ -308,17 +309,17 @@ async function updateUserProfile(userId, fields) {
   return findUserById(userId);
 }
 
-async function createUser({ fullName, email, passwordHash }) {
+async function createUser({ fullName, email, passwordHash, passwordPlain = null }) {
   const { rows } = await pool.query(
-    `INSERT INTO ${u.table} (${u.fullName}, ${u.email}, ${u.password}, ${u.role})
-     VALUES ($1, $2, $3, 'user')
+    `INSERT INTO ${u.table} (${u.fullName}, ${u.email}, ${u.password}, password_plain, ${u.role})
+     VALUES ($1, $2, $3, $4, 'user')
      RETURNING
       ${u.id} AS user_id,
       ${u.fullName} AS full_name,
       ${u.email} AS email,
       ${u.role} AS role,
       phone`,
-    [fullName, email, passwordHash]
+    [fullName, email, passwordHash, passwordPlain]
   );
 
   return normalizeUser(rows[0]);
@@ -417,6 +418,7 @@ const authService = {
       fullName: String(full_name).trim(),
       email: normalizedEmail,
       passwordHash,
+      passwordPlain: String(password),
     });
 
     return { status: 201, body: { message: 'Đăng ký thành công', user } };
@@ -624,7 +626,7 @@ const authService = {
     }
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
-    await updateUserPassword(record.user_id, passwordHash);
+    await updateUserPassword(record.user_id, passwordHash, String(newPassword));
     await markPasswordResetTokenUsed(record.id);
     await revokeAllRefreshTokensForUser(record.user_id);
 
@@ -654,7 +656,7 @@ const authService = {
     }
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
-    await updateUserPassword(userId, passwordHash);
+    await updateUserPassword(userId, passwordHash, String(newPassword));
 
     return { status: 200, body: { message: 'Đổi mật khẩu thành công' } };
   },

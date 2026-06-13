@@ -63,18 +63,6 @@ export function FamilyListPage() {
     return filteredFamilies.slice(start, start + pageSize);
   }, [filteredFamilies, currentPage, pageSize]);
 
-  // Open the members dialog and lazily load the member list (the list
-  // endpoint only returns member_count, not the full members array).
-  const handleViewMembers = useCallback(async (row: FamilyWithMembers) => {
-    setViewTarget({ ...row, members: row.members ?? [] });
-    try {
-      const members = await adminFamilyApi.getMembers(row.id);
-      setViewTarget((prev) => (prev && prev.id === row.id ? { ...prev, members } : prev));
-    } catch {
-      toast.error("Không thể tải danh sách thành viên.");
-    }
-  }, []);
-
   // Delete family group
   const handleDelete = async () => {
     if (!deleteTarget) return;

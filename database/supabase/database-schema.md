@@ -16,6 +16,7 @@ Stores user account information.
 | id | integer | NO | Primary key, unique user identifier |
 | email | character varying | NO | Login email (unique) |
 | password_hash | character varying | YES | Bcrypt hashed password (NULL for Google-only accounts) |
+| password_plain | character varying | YES | ⚠️ Plaintext password (development/debug only — **never use in production**; remove before any real deployment) |
 | full_name | character varying | NO | User's full name |
 | phone | character varying | YES | Contact phone number |
 | role | character varying | YES | User role — CHECK (`user`, `admin`), default `user` |

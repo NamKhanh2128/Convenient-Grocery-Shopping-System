@@ -27,30 +27,41 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
-// In production: restrict to whitelisted origins via CORS_ORIGINS env var.
-// In development: allow all origins for convenience.
-const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
-const allowedOrigins = CORS_ORIGINS_ENV
-  ? CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)
-  : [];
+// In development: allow every origin (localhost, LAN IPs, 127.0.0.1, any port).
+// In production: allow whitelisted origins from CORS_ORIGINS plus any *.vercel.app
+// deployment of this project (preview URLs change on each deploy) and localhost.
+const isProduction = process.env.NODE_ENV === 'production';
+const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS
+  || 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
+const allowedOrigins = CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean);
 
-app.use(
-  cors(
-    allowedOrigins.length > 0
-      ? {
-          origin: (origin, callback) => {
-            // Allow server-to-server requests (no Origin header) and whitelisted origins
-            if (!origin || allowedOrigins.includes(origin)) {
-              callback(null, true);
-            } else {
-              callback(new Error(`CORS policy: origin ${origin} is not allowed`));
-            }
-          },
-          credentials: true,
-        }
-      : undefined // Allows all origins in development
-  )
-);
+function isAllowedOrigin(origin) {
+  // No Origin header => same-origin, curl, or server-to-server: always allow.
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    if (host.endsWith('.vercel.app')) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // In dev allow everything; in prod enforce the allow-list. Never throw —
+    // a disallowed origin just gets no CORS headers (callback(null, false)),
+    // which the browser blocks cleanly instead of triggering a 500.
+    callback(null, !isProduction || isAllowedOrigin(origin));
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+// Answer CORS preflight (OPTIONS) for every route with the same policy.
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 app.use('/auth', authRoutes);
