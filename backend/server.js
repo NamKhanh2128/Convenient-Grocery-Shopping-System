@@ -28,17 +28,35 @@ const PORT = process.env.PORT || 3000;
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
 // In development: allow every origin (localhost, LAN IPs, 127.0.0.1, any port).
-// In production: allow whitelisted origins from CORS_ORIGINS plus any *.vercel.app
-// deployment of this project (preview URLs change on each deploy) and localhost.
+// In production: allow whitelisted origins from CORS_ORIGINS, plus localhost and
+// any *.vercel.app deployment of this project (preview URLs change per deploy).
+//
+// CORS_ORIGINS entries may be exact origins or regex patterns prefixed with
+// 'regex:'. Example:
+//   https://myapp.vercel.app,regex:https://myapp-.*\.vercel\.app
 const isProduction = process.env.NODE_ENV === 'production';
 const CORS_ORIGINS_ENV = process.env.CORS_ORIGINS
   || 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,https://convenient-grocery-shopping-system.vercel.app,https://convenient-grocery-shopping-system-frontend-user-pxtjekkft.vercel.app,https://convenient-grocery-shopping-system-pink.vercel.app';
-const allowedOrigins = CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean);
+
+// Split CORS_ORIGINS into exact strings and compiled RegExp patterns.
+const { exactOrigins, originPatterns } = (() => {
+  const exact = [];
+  const patterns = [];
+  for (const entry of CORS_ORIGINS_ENV.split(',').map((o) => o.trim()).filter(Boolean)) {
+    if (entry.startsWith('regex:')) {
+      try { patterns.push(new RegExp(entry.slice(6))); } catch { /* ignore bad regex */ }
+    } else {
+      exact.push(entry);
+    }
+  }
+  return { exactOrigins: exact, originPatterns: patterns };
+})();
 
 function isAllowedOrigin(origin) {
   // No Origin header => same-origin, curl, or server-to-server: always allow.
   if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
+  if (exactOrigins.includes(origin)) return true;
+  if (originPatterns.some((re) => re.test(origin))) return true;
   try {
     const host = new URL(origin).hostname;
     if (host === 'localhost' || host === '127.0.0.1') return true;
