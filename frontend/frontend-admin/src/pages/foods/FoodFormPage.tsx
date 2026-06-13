@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { Save, ArrowLeft, Loader2, Apple, Edit3 } from "lucide-react";
 import type { Unit, FoodCategory } from "@/types";
 import { adminFoodApi } from "@/api/adminFoodApi";
-import { adminRecipeApi } from "@/api/adminRecipeApi";
+import { adminFoodCategoryApi } from "@/api/adminFoodCategoryApi";
+import { adminUnitApi } from "@/api/adminUnitApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,8 +68,8 @@ export function FoodFormPage({ mode }: FoodFormPageProps) {
       setLoading(true);
       try {
         const [unitsData, categoriesData] = await Promise.all([
-          adminRecipeApi.getUnits(),
-          adminRecipeApi.getCategories(),
+          adminUnitApi.list(),
+          adminFoodCategoryApi.list(),
         ]);
         setUnits(unitsData);
         setCategories(categoriesData);

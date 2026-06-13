@@ -17,8 +17,8 @@ class AdminUserModel {
       conditions.push(`(u.full_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.phone ILIKE $${params.length})`);
     }
     if (role) {
-      params.push(role.toUpperCase());
-      conditions.push(`u.role = $${params.length}`);
+      params.push(role.toLowerCase());
+      conditions.push(`LOWER(u.role) = $${params.length}`);
     }
     if (locked !== null && locked !== undefined) {
       params.push(locked === 'true' || locked === true);
@@ -81,7 +81,7 @@ class AdminUserModel {
       `INSERT INTO users (full_name, email, phone, password_hash, role, is_locked)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING ${USER_COLUMNS}`,
-      [full_name, email.toLowerCase(), phone || null, password_hash, role.toUpperCase(), Boolean(is_locked)]
+      [full_name, email.toLowerCase(), phone || null, password_hash, (role || 'user').toLowerCase(), Boolean(is_locked)]
     );
     return AdminUserModel._mapUser(rows[0]);
   }
@@ -112,7 +112,7 @@ class AdminUserModel {
         full_name || null,
         email ? email.toLowerCase() : null,
         phone || null,
-        role ? role.toUpperCase() : null,
+        role ? role.toLowerCase() : null,
         is_locked === undefined ? null : Boolean(is_locked),
         id,
       ]
@@ -182,7 +182,7 @@ class AdminUserModel {
       email: row.email,
       full_name: row.full_name,
       phone: row.phone ?? null,
-      role: row.role,
+      role: String(row.role || 'user').toUpperCase(),
       is_locked: row.is_locked === true || row.is_locked === 't',
       failed_login_attempts: row.failed_login_attempts ?? 0,
       last_login: row.last_login,

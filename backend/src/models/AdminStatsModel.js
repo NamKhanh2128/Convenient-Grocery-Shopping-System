@@ -12,8 +12,8 @@ class AdminStatsModel {
       mealPlansResult,
       activeShoppingResult,
     ] = await Promise.all([
-      query(`SELECT COUNT(*) AS total FROM users WHERE role = 'USER' AND is_locked = FALSE`),
-      query(`SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN'`),
+      query(`SELECT COUNT(*) AS total FROM users WHERE UPPER(role) = 'USER' AND COALESCE(is_locked, FALSE) = FALSE`),
+      query(`SELECT COUNT(*) AS total FROM users WHERE UPPER(role) = 'ADMIN'`),
       query(`SELECT COUNT(*) AS total FROM foods`),
       query(`SELECT COUNT(*) AS total FROM recipes WHERE is_public = TRUE`),
       query(`SELECT COUNT(*) AS total FROM family_groups`),

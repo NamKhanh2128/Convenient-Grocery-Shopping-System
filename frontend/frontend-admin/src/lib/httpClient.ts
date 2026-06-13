@@ -4,9 +4,18 @@
  * Automatically attaches Authorization header from localStorage session.
  */
 
-// In development, Vite proxy forwards /api/* to backend:3000 (see vite.config.ts).
-// In production, set VITE_API_BASE_URL to the deployed backend URL.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+/**
+ * Normalize VITE_API_BASE_URL so paths like `/api/admin/...` never become `/api/api/...`.
+ * Accepts `http://localhost:3000`, `http://localhost:3000/api`, or empty (Vite proxy).
+ */
+function normalizeBaseUrl(value?: string): string {
+  if (!value) return "";
+  return value.replace(/\/+$/, "").replace(/\/api$/i, "");
+}
+
+// In development with empty base URL, Vite proxy forwards /api/* and /auth/* to backend:3000.
+// In production, set VITE_API_BASE_URL to the deployed backend origin (without trailing /api).
+const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 function getToken(): string | null {
   try {
