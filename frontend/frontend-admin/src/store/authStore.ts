@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { http } from "@/lib/httpClient";
 import { getSession, setSession } from "@/lib/mockDb";
-import { supabase } from "@/lib/supabaseClient";
 
 const REFRESH_TOKEN_KEY = "nateat.refreshToken";
 
@@ -26,8 +25,6 @@ type AdminAuthState = {
   error: string | null;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  signInWithGoogleRedirect: () => Promise<void>;
-  loginWithGoogle: (supabaseAccessToken: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (payload: Pick<AdminUser, "full_name" | "email" | "phone">) => Promise<void>;
   changePassword: (payload: { old_password: string; new_password: string }) => Promise<void>;
@@ -103,29 +100,6 @@ export const useAdminAuthStore = create<AdminAuthState>((set) => ({
       if (!email || !password) throw new Error("Vui lòng nhập đầy đủ email và mật khẩu.");
       const data = await http.post<AuthResponse>("/auth/login", { email, password });
       if (!data.accessToken || !data.user) throw new Error(data.message || "Đăng nhập thất bại.");
-      // ⚠️ Admin-only check - real role comes from backend
-      if (data.user.role !== "ADMIN") throw new Error("Tài khoản không có quyền quản trị.");
-
-      persistSession(data.accessToken, data.refreshToken, data.user.user_id);
-      set({ user: data.user, loading: false });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Đã xảy ra lỗi.";
-      set({ error: message, loading: false });
-      throw new Error(message);
-    }
-  },
-
-  signInWithGoogleRedirect: async () => {
-    const redirectTo = `${window.location.origin}/oauth/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
-    if (error) throw new Error(error.message);
-  },
-
-  loginWithGoogle: async (supabaseAccessToken) => {
-    set({ loading: true, error: null });
-    try {
-      const data = await http.post<AuthResponse>("/auth/oauth/google", { supabaseAccessToken });
-      if (!data.accessToken || !data.user) throw new Error(data.message || "Đăng nhập Google thất bại.");
       // ⚠️ Admin-only check - real role comes from backend
       if (data.user.role !== "ADMIN") throw new Error("Tài khoản không có quyền quản trị.");
 

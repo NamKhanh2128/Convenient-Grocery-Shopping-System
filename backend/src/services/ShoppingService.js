@@ -1,4 +1,5 @@
 const ShoppingModel = require('../models/ShoppingModel');
+const FoodUsageEventModel = require('../models/FoodUsageEventModel');
 const bridge = require('../utils/shoppingBridge');
 
 class ShoppingService {
@@ -197,14 +198,21 @@ class ShoppingService {
 
     const { unitId, categoryId } = await this._resolveItemIds({ unit_id, category_id, unit }, food);
     const itemName = await this._resolveItemDisplayName({ food_name, name: food_name }, foodId);
-    const itemId = await ShoppingModel.insertItem({
-      shoppingListId: listId,
-      foodId,
-      name: itemName,
-      quantity: Number(quantity),
-      unitId,
-      categoryId,
-    });
+    const existing = await ShoppingModel.findSimilarItem({ shoppingListId: listId, foodId, unitId });
+    let itemId;
+    if (existing) {
+      await ShoppingModel.incrementItemQuantity(existing.id, Number(quantity));
+      itemId = existing.id;
+    } else {
+      itemId = await ShoppingModel.insertItem({
+        shoppingListId: listId,
+        foodId,
+        name: itemName,
+        quantity: Number(quantity),
+        unitId,
+        categoryId,
+      });
+    }
 
     const detail = await this.getListDetail(listId, userFamilyId);
     const created = detail.items.find((i) => String(i.id) === String(itemId));
@@ -245,32 +253,70 @@ class ShoppingService {
       );
     }
 
-    const delta = Math.max(0, boughtQuantity - previousSynced);
-    if (delta > 0) {
-      await ShoppingModel.insertInventoryEntry({
-        familyId: userFamilyId,
-        userId,
-        foodId: item.food_id,
-        foodName: item.food_name || item.name,
-        quantity: delta,
-        unitSymbol: item.unit_symbol || item.unit_name,
-      });
-    }
-
     const itemStatus = this._resolveStatus(required, boughtQuantity);
     const remaining = Math.max(0, required - boughtQuantity);
     const isPurchased = boughtQuantity >= required;
+    const delta = Math.max(0, boughtQuantity - previousSynced);
     const inventorySyncedQuantity = previousSynced + delta;
 
-    await ShoppingModel.updateItemPurchased(
-      Number(itemId),
-      boughtQuantity,
-      remaining,
-      itemStatus,
-      isPurchased,
-      inventorySyncedQuantity,
-      userId != null ? Number(userId) : null,
-    );
+    const client = await ShoppingModel.getClient();
+    try {
+      await client.query('BEGIN');
+      if (delta > 0) {
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + 7);
+        const expiryDate = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`;
+        await client.query(
+          `INSERT INTO fridge_items (user_id, name, quantity, unit_id, category_id, expiration_date, storage_location)
+           VALUES ($1, $2, $3, $4, $5, $6, 'fridge')`,
+          [
+            Number(userId),
+            item.food_name || item.name,
+            delta,
+            item.unit_id ? Number(item.unit_id) : null,
+            item.category_id ? Number(item.category_id) : null,
+            expiryDate,
+          ]
+        );
+        await FoodUsageEventModel.record({
+          client,
+          userId,
+          foodId: item.food_id,
+          eventType: 'purchased',
+          quantity: delta,
+          unitId: item.unit_id,
+        });
+      }
+      await client.query(
+        `UPDATE shopping_list_items
+         SET bought_quantity = $1,
+             remaining_quantity = $2,
+             item_status = $3,
+             is_purchased = $4,
+             bought_status = $4,
+             inventory_synced_quantity = $5,
+             purchased_at = CASE WHEN $6 = TRUE THEN NOW() ELSE purchased_at END,
+             purchased_by = CASE WHEN $7 > 0 THEN $8::int ELSE NULL END
+         WHERE id = $9`,
+        [
+          boughtQuantity,
+          remaining,
+          itemStatus,
+          isPurchased,
+          inventorySyncedQuantity,
+          isPurchased,
+          boughtQuantity,
+          userId != null ? Number(userId) : null,
+          Number(itemId),
+        ]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     const updatedItems = await ShoppingModel.listItems(listId);
     const allDone = updatedItems.every((i) => i.item_status === 'COMPLETED');

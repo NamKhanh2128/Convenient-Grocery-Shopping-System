@@ -8,7 +8,6 @@ import { AdminErrorBoundary } from "@/components/shared/AdminErrorBoundary";
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
-const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage").then((m) => ({ default: m.OAuthCallbackPage })));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const UserListPage = lazy(() => import("@/pages/users/UserListPage").then((m) => ({ default: m.UserListPage })));
 const UserFormPage = lazy(() => import("@/pages/users/UserFormPage").then((m) => ({ default: m.UserFormPage })));
@@ -104,16 +103,6 @@ export function AdminRouter() {
             <AdminErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <ResetPasswordPage />
-              </Suspense>
-            </AdminErrorBoundary>
-          }
-        />
-        <Route
-          path="/oauth/callback"
-          element={
-            <AdminErrorBoundary>
-              <Suspense fallback={<PageLoader />}>
-                <OAuthCallbackPage />
               </Suspense>
             </AdminErrorBoundary>
           }

@@ -253,7 +253,8 @@ class FridgeController {
       });
     } catch (error) {
       console.error('[FridgeController.updateQuantity]', error);
-      return res.status(500).json({ success: false, message: 'Lỗi server khi cập nhật số lượng' });
+      const status = /chỉ còn|sử dụng|số lượng/i.test(error.message || '') ? 400 : 500;
+      return res.status(status).json({ success: false, message: error.message || 'Lỗi server khi cập nhật số lượng' });
     }
   }
 

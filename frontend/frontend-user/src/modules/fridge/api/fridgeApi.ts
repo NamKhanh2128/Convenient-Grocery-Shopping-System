@@ -172,6 +172,18 @@ export const fridgeApi = {
   // The backend update is partial (COALESCE), so we send only the quantity —
   // no catalog food lookup and no expiry validation, which lets it work for
   // custom items and items that are already expired.
+  async consume(fridge_item_id: string, quantityUsed: number): Promise<void> {
+    if (!Number.isFinite(quantityUsed) || quantityUsed <= 0) {
+      throw new Error("Số lượng không hợp lệ.");
+    }
+    unwrapApiData(
+      await apiClient.patch(`/fridge/items/${fridge_item_id}/quantity`, {
+        action: "use",
+        quantityUsed,
+      }),
+    );
+  },
+
   async setQuantity(fridge_item_id: string, quantity: number): Promise<void> {
     if (!Number.isFinite(quantity) || quantity < 0) {
       throw new Error("Số lượng không hợp lệ.");

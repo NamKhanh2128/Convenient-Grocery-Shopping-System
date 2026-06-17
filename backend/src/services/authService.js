@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const { authSchema } = require('../config/authSchema');
 const { pool } = require('../config/db');
 const { emailService } = require('./emailService');
-const { oauthService } = require('./oauthService');
 
 const MISSING_INFO_MESSAGE = 'Vui lòng nhập đầy đủ thông tin';
 const INVALID_TOKEN_MESSAGE = 'Token không hợp lệ hoặc đã hết hạn';
@@ -482,71 +481,6 @@ const authService = {
         accessToken,
         refreshToken,
         user: safeUser,
-      },
-    };
-  },
-
-  async loginWithGoogle({ supabaseAccessToken }) {
-    if (isBlank(supabaseAccessToken)) {
-      return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
-    }
-
-    let supabaseUser;
-    try {
-      supabaseUser = await oauthService.verifyGoogleAccessToken(supabaseAccessToken);
-    } catch (error) {
-      return { status: 401, body: { message: error.message } };
-    }
-
-    const googleId = supabaseUser.id;
-    const email = String(supabaseUser.email || '').trim().toLowerCase();
-    if (!googleId || !email) {
-      return { status: 400, body: { message: 'Không lấy được thông tin tài khoản Google' } };
-    }
-
-    const emailConfirmed = Boolean(supabaseUser.email_confirmed_at || supabaseUser.confirmed_at);
-    const metadata = supabaseUser.user_metadata || {};
-    const fullName = metadata.full_name || metadata.name || email.split('@')[0];
-    const avatarUrl = metadata.avatar_url || metadata.picture || null;
-
-    await ensureOAuthSchema();
-
-    let user = await findUserByGoogleId(googleId);
-
-    if (!user) {
-      const existing = await findUserByEmail(email);
-      if (existing) {
-        if (!emailConfirmed) {
-          return { status: 409, body: { message: 'Email Google chưa được xác thực, không thể liên kết tài khoản.' } };
-        }
-        if (existing.is_locked) {
-          return { status: 403, body: { message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.' } };
-        }
-        user = await linkGoogleAccount(existing.user_id, { googleId, avatarUrl });
-      } else {
-        user = await createGoogleUser({ fullName, email, googleId, avatarUrl });
-      }
-    }
-
-    await registerSuccessfulLogin(user.user_id);
-
-    const accessToken = authTokenService.createAccessToken(user);
-    const refreshToken = authTokenService.createRefreshToken(user);
-    const expiresAt = authTokenService.getRefreshTokenExpiresAt(refreshToken);
-
-    await createRefreshToken({
-      userId: user.user_id,
-      token: refreshToken,
-      expiresAt,
-    });
-
-    return {
-      status: 200,
-      body: {
-        message: 'Đăng nhập Google thành công',
-        accessToken,
-        refreshToken,
-        user,
       },
     };
   },

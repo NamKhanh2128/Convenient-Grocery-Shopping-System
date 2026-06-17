@@ -155,6 +155,10 @@ class MealPlanController {
         return res.status(400).json({ success: false, message: 'Missing fields for mark-cooked' });
       }
 
+      if (!is_cooked) {
+        return res.status(400).json({ success: false, message: 'Cooked meals cannot be undone' });
+      }
+
       if (is_cooked) {
         const wasCooked = await MealPlanModel.getItemCookedState({
           userId, mealDate: meal_date, mealType: meal_type, recipeId: recipe_id,
@@ -172,7 +176,7 @@ class MealPlanController {
           }
 
           // All ingredients available — deduct from fridge then mark cooked
-          await RecipeModel.deductIngredientsBestEffort({ recipeId: recipe_id, userId });
+          await RecipeModel.markCooked({ recipeId: recipe_id, userId });
         }
       }
 

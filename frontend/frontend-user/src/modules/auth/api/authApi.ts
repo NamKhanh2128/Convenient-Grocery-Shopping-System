@@ -1,6 +1,5 @@
 import { familyApi } from "@/modules/family/api/familyApi";
 import { endpoints } from "@/shared/constants/endpoints";
-import { supabase } from "@/shared/lib/supabaseClient";
 import type { AuthSession, User } from "@/types";
 
 function normalizeApiOrigin(value?: string) {
@@ -68,23 +67,6 @@ export const authApi = {
     saveSession(data.accessToken, data.refreshToken);
     if (payload.remember) localStorage.setItem("nateat.remembered_email", payload.email);
     else localStorage.removeItem("nateat.remembered_email");
-
-    const family = await familyApi.me().catch(() => null);
-    return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, family };
-  },
-  async signInWithGoogleRedirect() {
-    const redirectTo = `${window.location.origin}/oauth/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
-    if (error) throw new Error(error.message);
-  },
-  async loginWithGoogle(supabaseAccessToken: string): Promise<AuthSession> {
-    const data = await request<AuthResponse>(endpoints.auth.oauthGoogle, {
-      method: "POST",
-      body: JSON.stringify({ supabaseAccessToken }),
-    });
-
-    if (!data.accessToken || !data.user) throw new Error(data.message || "Dang nhap Google that bai.");
-    saveSession(data.accessToken, data.refreshToken);
 
     const family = await familyApi.me().catch(() => null);
     return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, family };

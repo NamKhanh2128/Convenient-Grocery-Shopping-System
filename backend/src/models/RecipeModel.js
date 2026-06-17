@@ -1,5 +1,6 @@
-const { query } = require('../config/db');
+const { pool, query } = require('../config/db');
 const ShoppingService = require('../services/ShoppingService');
+const FoodUsageEventModel = require('./FoodUsageEventModel');
 
 function isNumericId(value) {
   return /^\d+$/.test(String(value ?? ''));
@@ -31,6 +32,7 @@ function mapRecipe(row, ingredients = []) {
     gia_dinh_id: null,
     da_yeu_thich: Boolean(row.da_yeu_thich),
     ingredient_count: row.ingredient_count !== undefined ? Number(row.ingredient_count) : ingredients.length,
+    cook_count: Number(row.cooked_count || row.cook_count || 0),
     nguyen_lieu: ingredients,
   };
 }
@@ -48,7 +50,7 @@ function mapIngredient(row) {
 
 class RecipeModel {
   static async ensureRecipeTables() {
-    // English schema is the source of truth and already exists in Supabase.
+    await query(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cooked_count INTEGER DEFAULT 0`);
   }
 
   static async getCategories() {
@@ -59,18 +61,14 @@ class RecipeModel {
   }
 
   static async getPopular({ userId, limit = 5 }) {
+    await this.ensureRecipeTables();
     const { rows } = await query(
       `SELECT r.*,
-              COUNT(mpi.id)::int AS cook_count,
+              COALESCE(r.cooked_count, 0)::int AS cook_count,
               (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) AS ingredient_count
        FROM recipes r
-       JOIN meal_plan_items mpi ON mpi.recipe_id = r.id
-       JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-       WHERE mpi.is_cooked = true
-         AND mp.user_id = $1
-         AND (r.is_public = true OR r.created_by = $1)
-       GROUP BY r.id
-       ORDER BY cook_count DESC
+       WHERE (r.is_public = true OR r.created_by = $1)
+       ORDER BY COALESCE(r.cooked_count, 0) DESC, r.updated_at DESC
        LIMIT $2`,
       [Number(userId), Math.max(1, Number(limit) || 5)]
     );
@@ -383,42 +381,66 @@ class RecipeModel {
     return suggestions.sort((a, b) => a.missing.length - b.missing.length).slice(0, limit);
   }
 
-  static async deductIngredientsBestEffort({ recipeId, userId }) {
-    const recipe = await this.findById({ id: recipeId, userId });
-    if (!recipe) return;
-    for (const ing of recipe.nguyen_lieu) {
-      await query(
-        `UPDATE fridge_items
-         SET quantity = GREATEST(quantity - $3, 0), updated_at = NOW()
-         WHERE id = (
-           SELECT id FROM fridge_items
-           WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
-           ORDER BY expiration_date ASC
-           LIMIT 1
-         )`,
-        [Number(userId), ing.ten_nguyen_lieu, Number(ing.so_luong) || 1]
-      );
-    }
-  }
-
   static async markCooked({ recipeId, userId }) {
     const result = await this.getMissingForRecipe({ recipeId, userId });
     if (!result) throw new Error('Không tìm thấy công thức');
     if (result.missing.length) throw new Error('Không thể trừ đủ nguyên liệu');
-    for (const ing of result.recipe.nguyen_lieu) {
-      await query(
-        `UPDATE fridge_items
-         SET quantity = GREATEST(quantity - $3, 0), updated_at = NOW()
-         WHERE id = (
-           SELECT id FROM fridge_items
-           WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
-           ORDER BY expiration_date ASC
+    await this.ensureRecipeTables();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const ing of result.recipe.nguyen_lieu) {
+        const amount = Number(ing.so_luong) || 1;
+        const { rows } = await client.query(
+          `SELECT fi.id, fi.quantity, fi.unit_id, f.id AS food_id
+           FROM fridge_items fi
+           LEFT JOIN foods f ON lower(f.food_name) = lower(fi.name)
+           WHERE fi.user_id = $1 AND lower(fi.name) = lower($2) AND fi.quantity > 0
+           ORDER BY fi.expiration_date ASC NULLS LAST, fi.id ASC
            LIMIT 1
-         )`,
-        [Number(userId), ing.ten_nguyen_lieu, Number(ing.so_luong) || 1]
+           FOR UPDATE OF fi`,
+          [Number(userId), ing.ten_nguyen_lieu]
+        );
+        const item = rows[0];
+        if (!item || Number(item.quantity) < amount) {
+          throw new Error('KhÃ´ng thá»ƒ trá»« Ä‘á»§ nguyÃªn liá»‡u');
+        }
+
+        const nextQuantity = Number(item.quantity) - amount;
+        await FoodUsageEventModel.record({
+          client,
+          userId,
+          foodId: item.food_id,
+          fridgeItemId: item.id,
+          eventType: 'cooked',
+          quantity: amount,
+          unitId: item.unit_id,
+          recipeId,
+        });
+
+        if (nextQuantity <= 0) {
+          await client.query(`DELETE FROM fridge_items WHERE id = $1`, [item.id]);
+        } else {
+          await client.query(`UPDATE fridge_items SET quantity = $2, updated_at = NOW() WHERE id = $1`, [
+            item.id,
+            nextQuantity,
+          ]);
+        }
+      }
+
+      await client.query(
+        `UPDATE recipes SET cooked_count = COALESCE(cooked_count, 0) + 1, updated_at = NOW() WHERE id = $1`,
+        [Number(recipeId)]
       );
+      await client.query('COMMIT');
+      return { updated: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-    return { updated: true };
   }
 
   static async createShoppingListFromRecipe({ recipeId, userId, familyGroupId, title }) {

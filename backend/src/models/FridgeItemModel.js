@@ -1,5 +1,6 @@
-const { query } = require('../config/db');
+const { pool, query } = require('../config/db');
 const schema = require('../config/fridgeSchema');
+const FoodUsageEventModel = require('./FoodUsageEventModel');
 
 const { tables: t, columns: c } = schema;
 
@@ -118,7 +119,7 @@ function mapRow(row, familyKey = null) {
 const BASE_SELECT = `
   fi.${c.itemId} AS id,
   fi.${c.userId} AS user_id,
-  NULL::int AS food_id,
+  f.id AS food_id,
   fi.${c.itemName} AS food_name,
   fi.${c.quantity} AS quantity,
   u.${c.unitName} AS unit_name,
@@ -138,6 +139,7 @@ const BASE_FROM = `
   LEFT JOIN ${t.category} fc ON fc.id = fi.${c.categoryId}
   LEFT JOIN ${t.unit} u ON u.id = fi.${c.unitId}
   LEFT JOIN ${t.user} usr ON usr.id = fi.${c.userId}
+  LEFT JOIN ${t.food} f ON lower(f.food_name) = lower(fi.${c.itemName})
 `;
 
 class FridgeItemModel {
@@ -326,31 +328,141 @@ class FridgeItemModel {
   static async softDelete(id, userId, familyGroupId = null) {
     const existing = await this.findById(id, userId, familyGroupId);
     if (!existing) return false;
-    const result = await query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
-    return result.rowCount > 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT fi.id, fi.user_id, fi.name, fi.quantity, fi.unit_id, f.id AS food_id
+         FROM ${t.item} fi
+         LEFT JOIN ${t.food} f ON lower(f.food_name) = lower(fi.name)
+         WHERE fi.id = $1
+         FOR UPDATE`,
+        [Number(id)]
+      );
+      if (!current.rows[0]) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+      const row = current.rows[0];
+      await FoodUsageEventModel.record({
+        client,
+        userId,
+        foodId: row.food_id,
+        fridgeItemId: row.id,
+        eventType: 'wasted_deleted',
+        quantity: row.quantity,
+        unitId: row.unit_id,
+      });
+      const result = await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
+      await client.query('COMMIT');
+      return result.rowCount > 0;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   static async bulkSoftDelete(ids, userId, familyGroupId = null) {
     const userIds = await this.getFamilyUserIds(userId, familyGroupId);
     const numericIds = ids.filter(isNumericId).map(Number);
     if (!numericIds.length) return 0;
-    const result = await query(
-      `DELETE FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
-      [numericIds, userIds]
-    );
-    return result.rowCount || 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT fi.id, fi.quantity, fi.unit_id, f.id AS food_id
+         FROM ${t.item} fi
+         LEFT JOIN ${t.food} f ON lower(f.food_name) = lower(fi.name)
+         WHERE fi.id = ANY($1::int[]) AND fi.user_id = ANY($2::int[])
+         FOR UPDATE`,
+        [numericIds, userIds]
+      );
+      for (const row of current.rows) {
+        await FoodUsageEventModel.record({
+          client,
+          userId,
+          foodId: row.food_id,
+          fridgeItemId: row.id,
+          eventType: 'wasted_deleted',
+          quantity: row.quantity,
+          unitId: row.unit_id,
+        });
+      }
+      const result = await client.query(
+        `DELETE FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
+        [numericIds, userIds]
+      );
+      await client.query('COMMIT');
+      return result.rowCount || 0;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   static async updateQuantity(id, quantityUsed, action, userId, familyGroupId = null) {
     const existing = await this.findById(id, userId, familyGroupId);
     if (!existing) return null;
-    await query(
-      `UPDATE ${t.item}
-       SET quantity = CASE WHEN $3 = 'restock' THEN quantity + $2 ELSE GREATEST(quantity - $2, 0) END,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [Number(id), Number(quantityUsed), action]
-    );
+    const amount = Number(quantityUsed);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Số lượng sử dụng phải lớn hơn 0');
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT fi.id, fi.user_id, fi.quantity, fi.unit_id, f.id AS food_id
+         FROM ${t.item} fi
+         LEFT JOIN ${t.food} f ON lower(f.food_name) = lower(fi.name)
+         WHERE fi.id = $1
+         FOR UPDATE`,
+        [Number(id)]
+      );
+      const row = current.rows[0];
+      if (!row) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const currentQuantity = Number(row.quantity);
+
+      if (action === 'restock') {
+        await client.query(
+          `UPDATE ${t.item} SET quantity = quantity + $2, updated_at = NOW() WHERE id = $1`,
+          [Number(id), amount]
+        );
+      } else {
+        if (amount > currentQuantity) {
+          throw new Error(`Chỉ còn ${currentQuantity} trong tủ lạnh.`);
+        }
+        const nextQuantity = currentQuantity - amount;
+        await FoodUsageEventModel.record({
+          client,
+          userId,
+          foodId: row.food_id,
+          fridgeItemId: row.id,
+          eventType: 'used',
+          quantity: amount,
+          unitId: row.unit_id,
+        });
+        if (nextQuantity <= 0) {
+          await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
+        } else {
+          await client.query(
+            `UPDATE ${t.item} SET quantity = $2, updated_at = NOW() WHERE id = $1`,
+            [Number(id), nextQuantity]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
     return this.findById(id, userId, familyGroupId);
   }
 

@@ -1,4 +1,4 @@
-const { query: dbQuery } = require('../config/db');
+const { pool, query: dbQuery } = require('../config/db');
 const FridgeItemModel = require('./FridgeItemModel');
 
 class ShoppingModel {
@@ -111,6 +111,33 @@ class ShoppingModel {
       ]
     );
     return rows[0].id;
+  }
+
+  async findSimilarItem({ shoppingListId, foodId, unitId }) {
+    const { rows } = await dbQuery(
+      `SELECT id, quantity FROM shopping_list_items
+       WHERE shopping_list_id = $1 AND food_id = $2 AND unit_id = $3
+       LIMIT 1`,
+      [Number(shoppingListId), Number(foodId), Number(unitId)]
+    );
+    return rows[0] || null;
+  }
+
+  async incrementItemQuantity(itemId, quantity) {
+    await dbQuery(
+      `UPDATE shopping_list_items
+       SET quantity = quantity + $2,
+           remaining_quantity = GREATEST(quantity + $2 - COALESCE(bought_quantity, 0), 0),
+           item_status = CASE
+             WHEN COALESCE(bought_quantity, 0) >= quantity + $2 THEN 'COMPLETED'
+             WHEN COALESCE(bought_quantity, 0) > 0 THEN 'PARTIAL'
+             ELSE 'PENDING'
+           END,
+           is_purchased = (COALESCE(bought_quantity, 0) >= quantity + $2),
+           bought_status = (COALESCE(bought_quantity, 0) >= quantity + $2)
+       WHERE id = $1`,
+      [Number(itemId), Number(quantity)]
+    );
   }
 
   async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, purchasedBy = null) {
@@ -240,6 +267,10 @@ class ShoppingModel {
       [userId, type, title, message, relatedId]
     );
     return rows[0].id;
+  }
+
+  getClient() {
+    return pool.connect();
   }
 }
 

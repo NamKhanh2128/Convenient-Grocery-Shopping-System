@@ -344,20 +344,27 @@ export const mealApi = {
 
     const missing = suggestions.flatMap((item) => item.missing);
 
-    const unique = new Map(missing.map((row) => [row.food.food_id, row]));
+    const unique = new Map<string, { food_name: string; quantity: number; unit: FoodUnit; category: FoodCategory }>();
 
-    const items = [...unique.values()].map((row) => {
+    missing.forEach((row) => {
       const food_name = row.food.food_name?.trim() || "Nguyên liệu";
-      if (/^\d+$/.test(row.food.food_id)) {
-        return { food_id: row.food.food_id, food_name, quantity: row.quantity };
+      const unit = row.food.unit as FoodUnit;
+      const key = `${food_name.toLowerCase()}|${unit || ""}`;
+      const current = unique.get(key);
+      if (current) {
+        current.quantity += Number(row.quantity) || 0;
+        return;
       }
-      return {
+
+      unique.set(key, {
         food_name,
-        quantity: row.quantity,
-        unit: row.food.unit as FoodUnit,
+        quantity: Number(row.quantity) || 0,
+        unit,
         category: row.food.category as FoodCategory,
-      };
+      });
     });
+
+    const items = [...unique.values()];
 
     if (!items.length) throw new Error("Không có nguyên liệu thiếu để tạo danh sách mua.");
 
