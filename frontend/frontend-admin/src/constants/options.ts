@@ -13,8 +13,11 @@ export const foodCategories: FoodCategoryLabel[] = [
   "Khác",
 ];
 
-/** Valid unit symbols for units.symbol */
-export const foodUnits: UnitSymbol[] = ["kg", "g", "lít", "ml", "quả", "củ", "miếng", "gói"];
+// Single source of truth for the system's standard food units in this app —
+// must match the canonical rows seeded in database/supabase/seed.sql
+// (frontend-user's shared/constants/options.ts and the backend's
+// config/unitsConfig.js mirror this same list).
+export const foodUnits: UnitSymbol[] = ["kg", "g", "lít", "ml", "quả", "củ", "miếng", "gói", "hộp", "bó"];
 
 /** Valid values for fridge_items.storage_location */
 export const foodLocations: StorageLocation[] = ["Ngăn mát", "Ngăn đông", "Kệ thường"];

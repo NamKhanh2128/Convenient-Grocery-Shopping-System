@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const ShoppingService = require('../services/ShoppingService');
 const FridgeItemModel = require('./FridgeItemModel');
+const { normalizeUnitName } = require('../config/unitsConfig');
 
 function isNumericId(value) {
   return /^\d+$/.test(String(value ?? ''));
@@ -41,7 +42,10 @@ function mapIngredient(row) {
     id: String(row.id),
     ten_nguyen_lieu: row.name,
     so_luong: row.quantity !== null && row.quantity !== undefined ? Number(row.quantity) : null,
-    don_vi: row.unit_symbol || row.unit_name || null,
+    // Prefer the canonical unit name ("lít") over its DB symbol ("l") — the
+    // frontend's FoodUnit type and every unit dropdown use the Vietnamese
+    // name, and symbol only differs from name for "lít" today.
+    don_vi: row.unit_name || row.unit_symbol || null,
     thuc_pham_id: null,
     ten_thuc_pham: row.name,
   };
@@ -204,11 +208,13 @@ class RecipeModel {
     return mapRecipe(rows[0], ingredients.get(String(rows[0].id)) || []);
   }
 
+  // See FridgeItemModel.findUnitId — resolves to a canonical unit name
+  // instead of creating a new row for whatever string was sent in.
   static async findUnitId(unit) {
-    const text = String(unit || '').trim() || 'g';
-    const found = await query(`SELECT id FROM units WHERE lower(name) = lower($1) OR lower(symbol) = lower($1) LIMIT 1`, [text]);
+    const canonicalName = normalizeUnitName(unit);
+    const found = await query(`SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1`, [canonicalName]);
     if (found.rows[0]) return found.rows[0].id;
-    const created = await query(`INSERT INTO units (name, symbol) VALUES ($1, $1) RETURNING id`, [text]);
+    const created = await query(`INSERT INTO units (name, symbol) VALUES ($1, $1) RETURNING id`, [canonicalName]);
     return created.rows[0].id;
   }
 
@@ -386,7 +392,9 @@ class RecipeModel {
         totals.set(key, {
           food_name: ing.name,
           total: needed,
-          unit: ing.unit_symbol || ing.unit_name || 'g',
+          // Name-first, matching every other unit display in the system
+          // ("lít" not its symbol "l").
+          unit: ing.unit_name || ing.unit_symbol || 'g',
         });
       }
     }

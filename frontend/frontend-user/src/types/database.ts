@@ -438,8 +438,8 @@ export type ShoppingType = "daily" | "weekly";
 /** Display labels for food_categories.name_vi in offline mock layer */
 export type FoodCategory = "Rau củ" | "Thịt cá" | "Đồ khô" | "Sữa & Trứng" | "Gia vị" | "Khác";
 
-/** Display labels for units.symbol in offline mock layer */
-export type FoodUnit = "kg" | "g" | "lít" | "ml" | "quả" | "củ" | "miếng" | "gói";
+/** Display labels for units.name — must match every row seeded in the `units` table exactly. */
+export type FoodUnit = "kg" | "g" | "lít" | "ml" | "quả" | "củ" | "miếng" | "gói" | "hộp" | "bó";
 
 /** Display labels for fridge_items.storage_location in offline mock layer */
 export type FoodLocation = "Ngăn mát" | "Ngăn đông" | "Kệ thường";

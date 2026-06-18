@@ -2,7 +2,7 @@ import { apiClient, unwrapApiData } from "@/shared/api/apiClient";
 
 import { endpoints } from "@/shared/constants/endpoints";
 
-import type { FoodCategory, FoodUnit, MealPlan, MealPlanGroup } from "@/types";
+import type { FoodCategory, MealPlan, MealPlanGroup } from "@/types";
 
 import { db, saveDb } from "@/shared/lib/mockDb";
 
@@ -10,6 +10,7 @@ import { recipeApi } from "@/modules/recipe/api/recipeApi";
 
 import { shoppingApi } from "@/modules/shopping/api/shoppingApi";
 import { todayIso } from "@/shared/utils/date";
+import { normalizeFoodUnit } from "@/shared/utils/units";
 
 
 
@@ -318,7 +319,7 @@ export const mealApi = {
       items: missing.map((m) => ({
         food_name: m.food_name,
         quantity: m.quantity,
-        unit: m.unit as FoodUnit,
+        unit: normalizeFoodUnit(m.unit),
         category: "Khác" as FoodCategory,
       })),
     });
@@ -354,7 +355,7 @@ export const mealApi = {
       return {
         food_name,
         quantity: row.quantity,
-        unit: row.food.unit as FoodUnit,
+        unit: normalizeFoodUnit(row.food.unit),
         category: row.food.category as FoodCategory,
       };
     });

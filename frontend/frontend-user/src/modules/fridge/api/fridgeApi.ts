@@ -1,7 +1,8 @@
 import { apiClient, unwrapApiData } from "@/shared/api/apiClient";
 import { foodApi } from "@/shared/api/foodApi";
-import type { Food, FoodCategory, FoodLocation, FoodUnit, FridgeItem } from "@/types";
+import type { Food, FoodCategory, FoodLocation, FridgeItem } from "@/types";
 import { todayIso } from "@/shared/utils/date";
+import { normalizeFoodUnit } from "@/shared/utils/units";
 
 export type FridgeRow = FridgeItem & { food: Food };
 
@@ -54,7 +55,7 @@ function validateInventoryPayload(
 function toFridgeRow(item: BackendFridgeItem, family_id: string): FridgeRow {
   const food_id = item.foodId || item.id;
   const categoryName = (item.category?.name || "Khác") as FoodCategory;
-  const unit = (item.unit || "miếng") as FoodUnit;
+  const unit = normalizeFoodUnit(item.unit);
   const location = item.storageLocation as FoodLocation;
 
   return {

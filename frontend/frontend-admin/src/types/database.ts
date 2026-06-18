@@ -320,8 +320,8 @@ export type FoodCategoryLabel =
   | "Gia vị"
   | "Khác";
 
-/** Valid values for units.symbol */
-export type UnitSymbol = "kg" | "g" | "lít" | "ml" | "quả" | "củ" | "miếng" | "gói";
+/** Valid values for units.name — must match every row seeded in the `units` table exactly. */
+export type UnitSymbol = "kg" | "g" | "lít" | "ml" | "quả" | "củ" | "miếng" | "gói" | "hộp" | "bó";
 
 /** Valid values for fridge_items.storage_location */
 export type StorageLocation = "Ngăn mát" | "Ngăn đông" | "Kệ thường";

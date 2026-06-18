@@ -1,20 +1,10 @@
 const { query } = require('../config/db');
 const ShoppingModel = require('../models/ShoppingModel');
+const { normalizeUnitName } = require('../config/unitsConfig');
 
 const groupIdCache = new Map();
 const defaultUnitIdCache = new Map();
 let defaultCategoryIdCache = null;
-
-const UNIT_SYMBOLS = {
-  kg: 'kg',
-  g: 'g',
-  lít: 'l',
-  ml: 'ml',
-  quả: 'pcs',
-  củ: 'pcs',
-  miếng: 'pcs',
-  gói: 'pack',
-};
 
 async function resolveShoppingUserId(userId) {
   if (/^\d+$/.test(String(userId ?? ''))) {
@@ -58,16 +48,22 @@ async function resolveShoppingGroupId(familyGroupId) {
   return groupId;
 }
 
-async function getDefaultUnitId(unitSymbol) {
-  const symbol = UNIT_SYMBOLS[unitSymbol] || unitSymbol || 'g';
-  if (defaultUnitIdCache.has(symbol)) return defaultUnitIdCache.get(symbol);
-  const bySymbol = await query('SELECT id FROM units WHERE lower(symbol) = lower($1) OR lower(name) = lower($1) LIMIT 1', [symbol]);
-  if (bySymbol.rows[0]) {
-    defaultUnitIdCache.set(symbol, bySymbol.rows[0].id);
-    return bySymbol.rows[0].id;
+// Resolves to a canonical unit id (see config/unitsConfig.js). Previously
+// this ran the input through a hand-rolled UNIT_SYMBOLS map that translated
+// "quả"/"củ"/"miếng" all to the English symbol "pcs" and "gói" to "pack" —
+// neither of which exists in the real `units` table (symbol == name for
+// these), so the lookup always missed and silently inserted a junk "pcs"
+// unit row. normalizeUnitName resolves straight to a real canonical name.
+async function getDefaultUnitId(unitInput) {
+  const canonicalName = normalizeUnitName(unitInput);
+  if (defaultUnitIdCache.has(canonicalName)) return defaultUnitIdCache.get(canonicalName);
+  const found = await query('SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1', [canonicalName]);
+  if (found.rows[0]) {
+    defaultUnitIdCache.set(canonicalName, found.rows[0].id);
+    return found.rows[0].id;
   }
-  const created = await query('INSERT INTO units (name, symbol) VALUES ($1, $1) RETURNING id', [symbol]);
-  defaultUnitIdCache.set(symbol, created.rows[0].id);
+  const created = await query('INSERT INTO units (name, symbol) VALUES ($1, $1) RETURNING id', [canonicalName]);
+  defaultUnitIdCache.set(canonicalName, created.rows[0].id);
   return created.rows[0].id;
 }
 

@@ -1,5 +1,6 @@
 const { query, pool } = require('../config/db');
 const schema = require('../config/fridgeSchema');
+const { normalizeUnitName } = require('../config/unitsConfig');
 
 const { tables: t, columns: c } = schema;
 
@@ -96,7 +97,9 @@ function mapRow(row, familyKey = null) {
     id: String(row.id),
     name: foodName,
     quantity: Number(row.quantity),
-    unit: row.unit_symbol || row.unit_name || '',
+    // Name-first ("lít" not its DB symbol "l") — matches the canonical unit
+    // names used by every dropdown/type across the system.
+    unit: row.unit_name || row.unit_symbol || '',
     expiryDate: formatDate(row.expiry_date),
     category: row.category_id ? { id: String(row.category_id), name: row.category_name || null } : null,
     storageLocation: toVnStorage(row.storage_location),
@@ -165,16 +168,20 @@ class FridgeItemModel {
     return ids.length ? ids : [Number(userId)].filter(Boolean);
   }
 
+  // Resolves to one of the canonical unit rows (see config/unitsConfig.js).
+  // Never creates a new row here — an unrecognized unit string falls back to
+  // "miếng" instead of polluting the units table with one-off junk rows
+  // (this is exactly how a stray "pcs" unit got created previously).
   static async findUnitId(unit) {
-    const text = String(unit || '').trim() || 'g';
+    const canonicalName = normalizeUnitName(unit);
     const found = await query(
-      `SELECT id FROM ${t.unit} WHERE lower(name) = lower($1) OR lower(symbol) = lower($1) LIMIT 1`,
-      [text]
+      `SELECT id FROM ${t.unit} WHERE lower(name) = lower($1) LIMIT 1`,
+      [canonicalName]
     );
     if (found.rows[0]) return found.rows[0].id;
     const created = await query(
       `INSERT INTO ${t.unit} (name, symbol) VALUES ($1, $1) RETURNING id`,
-      [text]
+      [canonicalName]
     );
     return created.rows[0].id;
   }

@@ -1,8 +1,9 @@
 import { apiClient, unwrapApiData } from "@/shared/api/apiClient";
 import { endpoints } from "@/shared/constants/endpoints";
 import { shoppingApi, type ShoppingCreateItem, type ShoppingListDetail } from "@/modules/shopping/api/shoppingApi";
-import type { Food, FoodCategory, FoodUnit, Recipe, RecipeIngredient, RecipeSuggestion } from "@/types";
+import type { Food, FoodCategory, Recipe, RecipeIngredient, RecipeSuggestion } from "@/types";
 import { todayIso } from "@/shared/utils/date";
+import { normalizeFoodUnit } from "@/shared/utils/units";
 
 export function missingToShoppingItems(
   missing: RecipeSuggestion["missing"],
@@ -107,11 +108,7 @@ function extractApiError(error: unknown): string {
   return "Yêu cầu API thất bại.";
 }
 
-function toFoodUnit(unit: string | null | undefined): FoodUnit {
-  const allowed: FoodUnit[] = ["kg", "g", "lít", "ml", "quả", "củ", "miếng", "gói"];
-  if (unit && allowed.includes(unit as FoodUnit)) return unit as FoodUnit;
-  return "g";
-}
+const toFoodUnit = normalizeFoodUnit;
 
 function toFoodCategory(name: string | null | undefined): FoodCategory {
   const map: Record<string, FoodCategory> = {

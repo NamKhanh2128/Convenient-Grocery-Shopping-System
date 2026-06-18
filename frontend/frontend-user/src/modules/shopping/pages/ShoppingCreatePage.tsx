@@ -13,6 +13,7 @@ import { foodApi } from "@/shared/api/foodApi";
 import type { Food, ShoppingType, FoodUnit, FoodCategory } from "@/types";
 import { type ShoppingCreateItem } from "@/modules/shopping/api/shoppingApi";
 import { todayIso } from "@/shared/utils/date";
+import { foodUnits } from "@/shared/constants/options";
 
 type SelectSectionRow = {
   food_id: string;
@@ -59,7 +60,7 @@ export function ShoppingCreatePage() {
           return {
             food_name: row.custom_food_name || "Thực phẩm khác",
             quantity: row.quantity,
-            unit: row.unit || "g",
+            unit: row.unit || "miếng",
             category: row.category || "Khác",
           };
         }
@@ -159,12 +160,12 @@ export function ShoppingCreatePage() {
                 {row.food_id === "other" ? (
                   <div className="grid grid-cols-2 gap-1 h-10">
                     <Select
-                      value={row.unit || "g"}
+                      value={row.unit || "miếng"}
                       onValueChange={(val) => updateRow(index, { unit: val as FoodUnit })}
                     >
                       <SelectTrigger className="h-10 px-2 text-xs"><SelectValue placeholder="Đơn vị" /></SelectTrigger>
                       <SelectContent>
-                        {["kg", "g", "lít", "ml", "quả", "củ", "miếng", "gói"].map((u) => (
+                        {foodUnits.map((u) => (
                           <SelectItem key={u} value={u} className="text-xs">{u}</SelectItem>
                         ))}
                       </SelectContent>
