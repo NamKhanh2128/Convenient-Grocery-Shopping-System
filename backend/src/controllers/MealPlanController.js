@@ -99,12 +99,12 @@ class MealPlanController {
 
   static async getMissingIngredients(req, res) {
     try {
-      const { userId } = getContext(req);
+      const { userId, familyGroupId } = getContext(req);
       const { from, to } = req.query;
       if (!userId || !from || !to) {
         return res.status(400).json({ success: false, message: 'Thiếu from/to date' });
       }
-      const missing = await RecipeModel.getMissingForPlan({ userId, fromDate: from, toDate: to });
+      const missing = await RecipeModel.getMissingForPlan({ userId, familyGroupId, fromDate: from, toDate: to });
       return res.status(200).json({ success: true, data: { missing }, message: 'OK' });
     } catch (error) {
       console.error('[MealPlanController.getMissingIngredients]', error);
@@ -155,7 +155,7 @@ class MealPlanController {
 
   static async cook(req, res) {
     try {
-      const { userId } = getContext(req);
+      const { userId, familyGroupId } = getContext(req);
       const { meal_date, meal_type, recipe_id, is_cooked = true } = req.body;
       if (!userId || !meal_date || !meal_type || !recipe_id) {
         return res.status(400).json({ success: false, message: 'Missing fields for mark-cooked' });
@@ -168,7 +168,7 @@ class MealPlanController {
 
         if (!wasCooked) {
           // Check if all ingredients are available before allowing mark-as-cooked
-          const check = await RecipeModel.getMissingForRecipe({ recipeId: recipe_id, userId });
+          const check = await RecipeModel.getMissingForRecipe({ recipeId: recipe_id, userId, familyGroupId });
           if (check && check.missing.length > 0) {
             return res.status(200).json({
               success: true,
@@ -178,7 +178,7 @@ class MealPlanController {
           }
 
           // All ingredients available — deduct from fridge then mark cooked
-          await RecipeModel.deductIngredientsBestEffort({ recipeId: recipe_id, userId });
+          await RecipeModel.deductIngredientsBestEffort({ recipeId: recipe_id, userId, familyGroupId });
         }
       }
 

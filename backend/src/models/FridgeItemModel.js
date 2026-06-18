@@ -250,42 +250,60 @@ class FridgeItemModel {
     );
   }
 
-  // Deducts `quantity` of an ingredient (matched by name) from the user's
-  // fridge for recipe cooking. Used by RecipeModel.deductIngredientsBestEffort
-  // and markCooked, which previously ran a raw UPDATE that left 0-quantity
-  // rows behind. Now: deletes the row once it's fully consumed and logs a
-  // 'used' event either way, so cooking is reflected in usage statistics.
-  static async deductByName({ userId, name, quantity, recipeId = null }) {
+  // Deducts `quantity` of an ingredient (matched by name) from the family's
+  // shared fridge for recipe cooking — the fridge is family-wide, so a
+  // recipe can draw on whichever member's stock has the ingredient, not
+  // just the cooking user's own rows. Spans multiple members/rows
+  // (earliest expiry first) if one alone doesn't have enough. Used by
+  // RecipeModel.deductIngredientsBestEffort and markCooked, which
+  // previously ran a raw UPDATE that left 0-quantity rows behind. Now:
+  // deletes each row once it's fully consumed and logs a single 'used'
+  // event for the total deducted, attributed to the cooking user, so
+  // cooking is reflected in usage statistics.
+  static async deductByName({ actingUserId, familyUserIds, name, quantity, recipeId = null }) {
     return this.withTransaction(async (client) => {
+      let remainingNeeded = Number(quantity) || 0;
+      if (remainingNeeded <= 0) return;
+
       const { rows } = await client.query(
         `SELECT id, quantity, unit_id FROM ${t.item}
-         WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
-         ORDER BY expiration_date ASC
-         LIMIT 1`,
-        [Number(userId), name]
+         WHERE user_id = ANY($1::int[]) AND lower(name) = lower($2) AND quantity > 0
+         ORDER BY expiration_date ASC`,
+        [familyUserIds, name]
       );
-      const row = rows[0];
-      if (!row) return;
 
-      const available = Number(row.quantity);
-      const deductAmount = Math.min(Number(quantity) || 0, available);
-      if (deductAmount <= 0) return;
-      const remaining = Math.max(0, Math.round((available - deductAmount) * 1000) / 1000);
+      let totalDeducted = 0;
+      let lastUnitId = null;
+      let lastFridgeItemId = null;
+      for (const row of rows) {
+        if (remainingNeeded <= 0) break;
+        const available = Number(row.quantity);
+        const deductAmount = Math.min(remainingNeeded, available);
+        if (deductAmount <= 0) continue;
+        const remaining = Math.max(0, Math.round((available - deductAmount) * 1000) / 1000);
 
-      if (remaining <= 0) {
-        await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [row.id]);
-      } else {
-        await client.query(`UPDATE ${t.item} SET quantity = $2, updated_at = NOW() WHERE id = $1`, [row.id, remaining]);
+        if (remaining <= 0) {
+          await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [row.id]);
+        } else {
+          await client.query(`UPDATE ${t.item} SET quantity = $2, updated_at = NOW() WHERE id = $1`, [row.id, remaining]);
+        }
+
+        totalDeducted += deductAmount;
+        remainingNeeded -= deductAmount;
+        lastUnitId = row.unit_id;
+        lastFridgeItemId = row.id;
       }
+
+      if (totalDeducted <= 0) return;
 
       const foodId = await this.resolveFoodIdByName(name, client);
       await this.recordUsageEvent({
-        userId,
+        userId: actingUserId,
         foodId,
-        fridgeItemId: row.id,
+        fridgeItemId: lastFridgeItemId,
         eventType: 'used',
-        quantity: deductAmount,
-        unitId: row.unit_id,
+        quantity: totalDeducted,
+        unitId: lastUnitId,
         recipeId,
       }, client);
     });

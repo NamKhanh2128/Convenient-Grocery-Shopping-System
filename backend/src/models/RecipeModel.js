@@ -327,17 +327,29 @@ class RecipeModel {
     return rows.map((row) => mapRecipe(row, ingredients.get(String(row.id)) || []));
   }
 
-  static async getStock(userId) {
-    const { rows } = await query(`SELECT name, quantity FROM fridge_items WHERE user_id = $1 AND quantity > 0`, [Number(userId)]);
+  // The fridge is shared by the whole family, not just the requesting user
+  // — aggregate every family member's fridge_items (same household stock)
+  // so suggestions/missing-ingredient checks reflect what the family
+  // actually has, summing quantities when multiple members hold the same
+  // ingredient.
+  static async getStock(userId, familyGroupId) {
+    const userIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
+    const { rows } = await query(
+      `SELECT name, quantity FROM fridge_items WHERE user_id = ANY($1::int[]) AND quantity > 0`,
+      [userIds]
+    );
     const stock = new Map();
-    for (const row of rows) stock.set(normalizeText(row.name), Number(row.quantity || 0));
+    for (const row of rows) {
+      const key = normalizeText(row.name);
+      stock.set(key, (stock.get(key) || 0) + Number(row.quantity || 0));
+    }
     return stock;
   }
 
-  static async getMissingForRecipe({ recipeId, userId }) {
+  static async getMissingForRecipe({ recipeId, userId, familyGroupId }) {
     const recipe = await this.findById({ id: recipeId, userId });
     if (!recipe) return null;
-    const stock = await this.getStock(userId);
+    const stock = await this.getStock(userId, familyGroupId);
     const missing = [];
     const available_food_ids = [];
     for (const ing of recipe.nguyen_lieu) {
@@ -349,7 +361,7 @@ class RecipeModel {
     return { recipe, missing, available_food_ids };
   }
 
-  static async getMissingForPlan({ userId, fromDate, toDate }) {
+  static async getMissingForPlan({ userId, familyGroupId, fromDate, toDate }) {
     // Count how many times each recipe is planned in the range — a recipe
     // cooked 3 times that week needs 3x its ingredients, not just 1x. The
     // previous DISTINCT-recipe_id version collapsed repeats and under-counted.
@@ -400,7 +412,7 @@ class RecipeModel {
     }
 
     // Get fridge stock once
-    const stock = await this.getStock(userId);
+    const stock = await this.getStock(userId, familyGroupId);
 
     const missing = [];
     for (const [key, ing] of totals) {
@@ -417,22 +429,24 @@ class RecipeModel {
     return missing;
   }
 
-  static async suggestFromFridge({ userId, limit = 20 }) {
+  static async suggestFromFridge({ userId, familyGroupId, limit = 20 }) {
     const recipes = await this.findAccessible({ userId, limit, lite: false });
     const suggestions = [];
     for (const recipe of recipes) {
-      const result = await this.getMissingForRecipe({ recipeId: recipe.id, userId });
+      const result = await this.getMissingForRecipe({ recipeId: recipe.id, userId, familyGroupId });
       suggestions.push({ recipe, available_food_ids: result.available_food_ids, missing: result.missing });
     }
     return suggestions.sort((a, b) => a.missing.length - b.missing.length).slice(0, limit);
   }
 
-  static async deductIngredientsBestEffort({ recipeId, userId }) {
+  static async deductIngredientsBestEffort({ recipeId, userId, familyGroupId }) {
     const recipe = await this.findById({ id: recipeId, userId });
     if (!recipe) return;
+    const familyUserIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
     for (const ing of recipe.nguyen_lieu) {
       await FridgeItemModel.deductByName({
-        userId,
+        actingUserId: userId,
+        familyUserIds,
         name: ing.ten_nguyen_lieu,
         quantity: Number(ing.so_luong) || 1,
         recipeId,
@@ -440,13 +454,15 @@ class RecipeModel {
     }
   }
 
-  static async markCooked({ recipeId, userId }) {
-    const result = await this.getMissingForRecipe({ recipeId, userId });
+  static async markCooked({ recipeId, userId, familyGroupId }) {
+    const result = await this.getMissingForRecipe({ recipeId, userId, familyGroupId });
     if (!result) throw new Error('Không tìm thấy công thức');
     if (result.missing.length) throw new Error('Không thể trừ đủ nguyên liệu');
+    const familyUserIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
     for (const ing of result.recipe.nguyen_lieu) {
       await FridgeItemModel.deductByName({
-        userId,
+        actingUserId: userId,
+        familyUserIds,
         name: ing.ten_nguyen_lieu,
         quantity: Number(ing.so_luong) || 1,
         recipeId,
@@ -465,7 +481,7 @@ class RecipeModel {
   }
 
   static async createShoppingListFromRecipe({ recipeId, userId, familyGroupId, title }) {
-    const result = await this.getMissingForRecipe({ recipeId, userId });
+    const result = await this.getMissingForRecipe({ recipeId, userId, familyGroupId });
     if (!result) throw new Error('Không tìm thấy công thức');
     if (!result.missing.length) throw new Error('Không thiếu nguyên liệu để tạo danh sách mua');
     const list = await ShoppingService.createList({
