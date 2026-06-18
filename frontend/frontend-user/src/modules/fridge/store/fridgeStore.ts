@@ -10,7 +10,7 @@ type FridgeState = {
   load: (family_id: string) => Promise<void>;
   create: (payload: Omit<FridgeItem, "fridge_item_id">) => Promise<void>;
   update: (id: string, payload: Omit<FridgeItem, "fridge_item_id" | "family_id">, family_id: string) => Promise<void>;
-  setQuantity: (id: string, quantity: number, family_id: string) => Promise<void>;
+  consume: (id: string, quantityUsed: number, family_id: string) => Promise<{ deleted: boolean }>;
   remove: (id: string, family_id: string) => Promise<void>;
   removeMany: (ids: string[], family_id: string) => Promise<void>;
 };
@@ -35,9 +35,10 @@ export const useFridgeStore = create<FridgeState>((set, get) => ({
     await fridgeApi.update(id, payload);
     await get().load(family_id);
   },
-  setQuantity: async (id, quantity, family_id) => {
-    await fridgeApi.setQuantity(id, quantity);
+  consume: async (id, quantityUsed, family_id) => {
+    const result = await fridgeApi.consume(id, quantityUsed);
     await get().load(family_id);
+    return result;
   },
   remove: async (id, family_id) => {
     await fridgeApi.remove(id);

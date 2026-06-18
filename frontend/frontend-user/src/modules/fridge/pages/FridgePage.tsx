@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 export function FridgePage() {
   const navigate = useNavigate();
   const family = useAuthStore((state) => state.family)!;
-  const { items, load, remove, removeMany, update, setQuantity, loading, error } = useFridgeStore();
+  const { items, load, remove, removeMany, update, consume, loading, error } = useFridgeStore();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [expiry, setExpiry] = useState("all");
@@ -110,12 +110,11 @@ export function FridgePage() {
       return;
     }
     try {
-      const nextQuantity = Math.max(0, item.quantity - consumeQuantity);
-      await setQuantity(item.fridge_item_id, nextQuantity, family.family_id);
+      const { deleted } = await consume(item.fridge_item_id, consumeQuantity, family.family_id);
       toast.success(
-        nextQuantity === 0
+        deleted
           ? `Đã dùng hết "${item.food.food_name}".`
-          : `Đã dùng ${consumeQuantity} ${item.food.unit}, còn lại ${nextQuantity} ${item.food.unit}.`,
+          : `Đã dùng ${consumeQuantity} ${item.food.unit} "${item.food.food_name}".`,
       );
       setConsumeId(null);
     } catch (error) {

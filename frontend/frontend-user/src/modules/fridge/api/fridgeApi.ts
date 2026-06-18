@@ -168,17 +168,18 @@ export const fridgeApi = {
     };
   },
 
-  // Lightweight quantity-only update used by "dùng nhanh" (quick consume).
-  // The backend update is partial (COALESCE), so we send only the quantity —
-  // no catalog food lookup and no expiry validation, which lets it work for
-  // custom items and items that are already expired.
-  async setQuantity(fridge_item_id: string, quantity: number): Promise<void> {
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      throw new Error("Số lượng không hợp lệ.");
+  // "Dùng nhanh" (quick consume): deducts quantityUsed from the item. The
+  // backend logs a 'used' event for statistics, and if it fully empties the
+  // item, deletes it instead of leaving a 0-quantity row — so the caller must
+  // check `deleted` rather than assume the item still exists afterward.
+  async consume(fridge_item_id: string, quantityUsed: number): Promise<{ deleted: boolean }> {
+    if (!Number.isFinite(quantityUsed) || quantityUsed <= 0) {
+      throw new Error("Số lượng dùng phải lớn hơn 0.");
     }
-    unwrapApiData(
-      await apiClient.put(`/fridge/items/${fridge_item_id}`, { quantity }),
+    const data = unwrapApiData<{ deleted?: boolean }>(
+      await apiClient.patch(`/fridge/items/${fridge_item_id}/quantity`, { quantityUsed, action: "use" }),
     );
+    return { deleted: Boolean(data?.deleted) };
   },
 
   async remove(fridge_item_id: string) {

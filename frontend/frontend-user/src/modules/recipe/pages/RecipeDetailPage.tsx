@@ -18,6 +18,8 @@ import { missingToShoppingItems, recipeApi, type RecipeDetail } from "@/modules/
 
 import { useShoppingStore } from "@/modules/shopping/store/shoppingStore";
 
+import { useRecipeStore } from "@/modules/recipe/store/recipeStore";
+
 import type { RecipeSuggestion } from "@/types";
 
 import { todayIso } from "@/shared/utils/date";
@@ -45,6 +47,8 @@ export function RecipeDetailPage() {
   const [cookingStep, setCookingStep] = useState(0);
 
   const createShoppingList = useShoppingStore((state) => state.create);
+
+  const loadPopular = useRecipeStore((state) => state.loadPopular);
 
   useEffect(() => {
 
@@ -103,6 +107,8 @@ export function RecipeDetailPage() {
       await recipeApi.markCooked(family.family_id, recipe.recipe_id);
 
       toast.success("Đã nấu ăn và cập nhật lại nguyên liệu trong tủ lạnh.");
+
+      void loadPopular(family.family_id);
 
     } catch (error) {
 
@@ -405,6 +411,10 @@ export function RecipeDetailPage() {
         primaryLabel={isLastStep ? "Hoàn tất nấu" : "Bước tiếp"}
 
         secondaryLabel={cookingStep > 0 ? "Quay lại" : "Đóng"}
+
+        closeOnPrimary={false}
+
+        closeOnSecondary={false}
 
         onPrimary={() => {
 

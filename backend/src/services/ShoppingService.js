@@ -121,6 +121,11 @@ class ShoppingService {
       assignedUserId: assignedUserId || null,
     });
 
+    // Resolve every item to its catalog food first, then merge duplicates by
+    // foodId (summing quantity) before inserting — so two requested lines for
+    // the same food (e.g. from meal-plan "missing ingredients" combining
+    // several recipes) become one row instead of splitting the quantity.
+    const resolved = new Map();
     for (const item of items) {
       let foodId = item.food_id ? Number(item.food_id) : null;
       let food = null;
@@ -141,13 +146,23 @@ class ShoppingService {
       if (!foodId) throw new Error(`Mặt hàng "${item.food_name || item.food_id}" không hợp lệ.`);
       const { unitId, categoryId } = await this._resolveItemIds(item, food);
       const itemName = await this._resolveItemDisplayName(item, foodId);
+
+      const existing = resolved.get(foodId);
+      if (existing) {
+        existing.quantity += Number(item.quantity) || 0;
+      } else {
+        resolved.set(foodId, { foodId, name: itemName, quantity: Number(item.quantity) || 0, unitId, categoryId });
+      }
+    }
+
+    for (const entry of resolved.values()) {
       await ShoppingModel.insertItem({
         shoppingListId: listId,
-        foodId,
-        name: itemName,
-        quantity: Number(item.quantity),
-        unitId,
-        categoryId,
+        foodId: entry.foodId,
+        name: entry.name,
+        quantity: entry.quantity,
+        unitId: entry.unitId,
+        categoryId: entry.categoryId,
       });
     }
 
@@ -246,6 +261,25 @@ class ShoppingService {
     }
 
     const delta = Math.max(0, boughtQuantity - previousSynced);
+    const itemStatus = this._resolveStatus(required, boughtQuantity);
+    const remaining = Math.max(0, required - boughtQuantity);
+    const isPurchased = boughtQuantity >= required;
+    const inventorySyncedQuantity = previousSynced + delta;
+
+    // Update the shopping-list bookkeeping BEFORE touching the fridge: if this
+    // update fails, nothing is added to inventory, so a retry can't end up
+    // double-adding the item (previously the fridge insert ran first and
+    // would silently succeed even when this update threw).
+    await ShoppingModel.updateItemPurchased(
+      Number(itemId),
+      boughtQuantity,
+      remaining,
+      itemStatus,
+      isPurchased,
+      inventorySyncedQuantity,
+      userId != null ? Number(userId) : null,
+    );
+
     if (delta > 0) {
       await ShoppingModel.insertInventoryEntry({
         familyId: userFamilyId,
@@ -256,21 +290,6 @@ class ShoppingService {
         unitSymbol: item.unit_symbol || item.unit_name,
       });
     }
-
-    const itemStatus = this._resolveStatus(required, boughtQuantity);
-    const remaining = Math.max(0, required - boughtQuantity);
-    const isPurchased = boughtQuantity >= required;
-    const inventorySyncedQuantity = previousSynced + delta;
-
-    await ShoppingModel.updateItemPurchased(
-      Number(itemId),
-      boughtQuantity,
-      remaining,
-      itemStatus,
-      isPurchased,
-      inventorySyncedQuantity,
-      userId != null ? Number(userId) : null,
-    );
 
     const updatedItems = await ShoppingModel.listItems(listId);
     const allDone = updatedItems.every((i) => i.item_status === 'COMPLETED');

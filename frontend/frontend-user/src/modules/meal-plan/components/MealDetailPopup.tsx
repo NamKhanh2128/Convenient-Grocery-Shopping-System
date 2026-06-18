@@ -34,7 +34,7 @@ export function MealDetailPopup() {
     replaceRecipeInSlot,
     markRecipeCooked,
     isRecipeCooked,
-    createShoppingFromMissing,
+    createShoppingFromMissingForDate,
     removeSuggestion,
     loadWeek,
     familyId,
@@ -129,13 +129,13 @@ export function MealDetailPopup() {
   }
 
   async function handleCreateShopping() {
-    if (!familyId) return;
+    if (!familyId || !editingDate) return;
     setSubmitting(true);
     try {
-      await createShoppingFromMissing(familyId, userId);
-      toast.success("Đã tạo danh sách mua sắm nguyên liệu thiếu.");
-    } catch {
-      toast.error("Không thể tạo danh sách. Thử lại.");
+      await createShoppingFromMissingForDate(familyId, userId, editingDate);
+      toast.success("Đã tạo danh sách mua sắm nguyên liệu thiếu cho ngày này.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không thể tạo danh sách. Thử lại.");
     } finally {
       setSubmitting(false);
     }
@@ -247,16 +247,17 @@ export function MealDetailPopup() {
                                   <Star className={`mr-1 h-4 w-4 ${recipe.is_favorite ? "fill-yellow-400 text-yellow-400" : ""}`} />
                                   {recipe.is_favorite ? "Bỏ thích" : t("favoriteButton")}
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant={cooked ? "outline" : "default"}
-                                  onClick={() => handleToggleCooked(slot, recipe)}
-                                  disabled={submitting}
-                                  className={cooked ? "border-green-300 text-green-700" : "bg-green-600 hover:bg-green-700"}
-                                >
-                                  <CheckCircle2 className="mr-1 h-4 w-4" />
-                                  {cooked ? "Bỏ đánh dấu" : "Đã nấu"}
-                                </Button>
+                                {!cooked && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleToggleCooked(slot, recipe)}
+                                    disabled={submitting}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                                    Đã nấu
+                                  </Button>
+                                )}
                                 <Button size="sm" variant="destructive" onClick={() => handleRemove(slot, recipe)} disabled={submitting}>
                                   <Trash2 className="mr-1 h-4 w-4" />{t("removeButton")}
                                 </Button>

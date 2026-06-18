@@ -91,19 +91,69 @@ class StatsModel {
     return result;
   }
 
+  // "Tiêu thụ theo danh mục" — actual consumption (food_usage_events
+  // event_type='used', logged by FridgeItemModel on "Dùng" and on recipe
+  // cooking deductions), NOT current fridge stock. Excludes the per-cook
+  // 'cooked' summary events, which carry no real ingredient quantity.
   static async getCategoryBar(familyId) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
 
     const { rows } = await query(`
-      SELECT COALESCE(fc.name_vi, 'Khác') AS category, SUM(fi.quantity)::float AS count
-      FROM fridge_items fi
-      LEFT JOIN food_categories fc ON fc.id = fi.category_id
-      WHERE fi.user_id = ANY($1)
+      SELECT COALESCE(fc.name_vi, 'Khác') AS category, SUM(fue.quantity)::float AS count
+      FROM food_usage_events fue
+      LEFT JOIN foods f ON f.id = fue.food_id
+      LEFT JOIN food_categories fc ON fc.id = f.category_id
+      WHERE fue.user_id = ANY($1) AND fue.event_type = 'used'
       GROUP BY fc.name_vi ORDER BY count DESC
     `, [userIds]);
 
     return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
+  }
+
+  // "Thực phẩm đã mua theo thời gian" — number of PRODUCTS purchased per day
+  // (last 7 days), broken down by category. Items are measured in different
+  // units (kg, quả, gói, lít...), so summing their quantities into one number
+  // would be meaningless — counting items per category instead is unit-
+  // agnostic AND tells you *what kind* of food was bought each day, not just
+  // an anonymous total.
+  static async getPurchaseTrend(familyId) {
+    const categoriesRes = await query(`SELECT name_vi FROM food_categories ORDER BY id`);
+    const categories = categoriesRes.rows.map((r) => r.name_vi);
+
+    const { rows } = await query(`
+      SELECT TO_CHAR(sli.purchased_at, 'MM-DD') AS date,
+             COALESCE(fc.name_vi, 'Khác') AS category,
+             COUNT(*)::int AS count
+      FROM shopping_list_items sli
+      JOIN shopping_lists sl ON sl.id = sli.shopping_list_id
+      LEFT JOIN food_categories fc ON fc.id = sli.category_id
+      WHERE sl.group_id = $1
+        AND sli.purchased_at IS NOT NULL
+        AND sli.purchased_at >= CURRENT_DATE - INTERVAL '6 days'
+      GROUP BY TO_CHAR(sli.purchased_at, 'MM-DD'), fc.name_vi
+    `, [Number(familyId)]);
+
+    const byDate = new Map();
+    rows.forEach((r) => {
+      if (!byDate.has(r.date)) byDate.set(r.date, {});
+      byDate.get(r.date)[r.category] = r.count;
+    });
+
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = localMmDd(d);
+      const dayCategories = byDate.get(key) || {};
+      const entry = { date: key, total: 0 };
+      for (const cat of categories) {
+        entry[cat] = dayCategories[cat] ?? 0;
+        entry.total += entry[cat];
+      }
+      result.push(entry);
+    }
+    return { categories, days: result };
   }
 
   static async getFoodTrends(familyId) {
@@ -111,29 +161,29 @@ class StatsModel {
     if (userIds.length === 0) return { mostUsed: [], leastUsed: [] };
 
     const [usedRes, leastRes] = await Promise.all([
-      // Most used: ingredients appearing most in cooked meal plans
+      // Most used: foods with the most 'used' events (consumed via "Dùng" or
+      // recipe cooking — see FridgeItemModel.deductByName / updateQuantity).
       query(`
         SELECT
-          'ing-' || LOWER(ri.name) AS food_id,
-          ri.name AS food_name,
-          COALESCE(MAX(f.icon), '🍽️') AS icon,
-          COALESCE(MAX(fc.name_vi), 'Khác') AS category,
+          COALESCE(fue.food_id::text, 'fi-' || MIN(fue.fridge_item_id)) AS food_id,
+          COALESCE(f.food_name, 'Thực phẩm khác') AS food_name,
+          COALESCE(f.icon, '🍽️') AS icon,
+          COALESCE(fc.name_vi, 'Khác') AS category,
           COUNT(*)::int AS count,
           EXISTS(
             SELECT 1 FROM fridge_items fi2
-            WHERE fi2.user_id = ANY($1) AND LOWER(fi2.name) = LOWER(ri.name)
+            WHERE fi2.user_id = ANY($1) AND fue.food_id IS NOT NULL
+              AND LOWER(fi2.name) = LOWER(f.food_name)
           ) AS in_fridge
-        FROM recipe_ingredients ri
-        LEFT JOIN foods f ON LOWER(f.food_name) = LOWER(ri.name)
+        FROM food_usage_events fue
+        LEFT JOIN foods f ON f.id = fue.food_id
         LEFT JOIN food_categories fc ON fc.id = f.category_id
-        JOIN meal_plan_items mpi ON mpi.recipe_id = ri.recipe_id
-        JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-        WHERE mp.user_id = ANY($1) AND mpi.is_cooked = true
-        GROUP BY ri.name
+        WHERE fue.user_id = ANY($1) AND fue.event_type = 'used'
+        GROUP BY fue.food_id, f.food_name, f.icon, fc.name_vi
         ORDER BY count DESC
         LIMIT 6
       `, [userIds]),
-      // Least used: fridge items never used in a cooked recipe
+      // Least used: fridge items never recorded in a 'used' event.
       query(`
         SELECT DISTINCT
           'fi-' || fi.id AS food_id,
@@ -146,12 +196,9 @@ class StatsModel {
         LEFT JOIN food_categories fc ON fc.id = fi.category_id
         WHERE fi.user_id = ANY($1)
           AND NOT EXISTS (
-            SELECT 1 FROM recipe_ingredients ri
-            JOIN meal_plan_items mpi ON mpi.recipe_id = ri.recipe_id
-            JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-            WHERE LOWER(ri.name) = LOWER(fi.name)
-              AND mp.user_id = ANY($1)
-              AND mpi.is_cooked = true
+            SELECT 1 FROM food_usage_events fue
+            WHERE fue.user_id = ANY($1) AND fue.event_type = 'used'
+              AND (fue.fridge_item_id = fi.id OR (fue.food_id IS NOT NULL AND fue.food_id = f.id))
           )
         LIMIT 6
       `, [userIds]),
@@ -175,12 +222,12 @@ class StatsModel {
   static async getWasteReport(familyId) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) {
-      return { expiredItems: [], activeCount: 0, expiredCount: 0, wasteRatio: 0 };
+      return { expiredItems: [], activeCount: 0, expiredCount: 0, wasteRatio: 0, wastedEvents: [], wastedCount: 0, usedCount: 0 };
     }
 
     const today = localYmd(new Date());
 
-    const [expiredRes, activeRes] = await Promise.all([
+    const [expiredRes, activeRes, wastedRes, wastedCountRes, usedCountRes] = await Promise.all([
       query(`
         SELECT fi.id::text AS fridge_item_id,
                fi.name AS food_name,
@@ -194,17 +241,53 @@ class StatsModel {
         ORDER BY fi.expiration_date ASC
       `, [userIds, today]),
       query(`SELECT COUNT(*)::int AS total FROM fridge_items WHERE user_id = ANY($1) AND expiration_date >= $2`, [userIds, today]),
+      // Explicit waste events from the "Xóa" (delete/throw away) action — last 30 days.
+      query(`
+        SELECT
+          fue.id::text AS event_id,
+          COALESCE(f.food_name, 'Thực phẩm khác') AS food_name,
+          COALESCE(f.icon, '🍽️') AS icon,
+          fue.quantity::float AS quantity,
+          TO_CHAR(fue.created_at, 'YYYY-MM-DD') AS wasted_date
+        FROM food_usage_events fue
+        LEFT JOIN foods f ON f.id = fue.food_id
+        WHERE fue.user_id = ANY($1) AND fue.event_type = 'wasted'
+          AND fue.created_at >= NOW() - INTERVAL '30 days'
+        ORDER BY fue.created_at DESC
+        LIMIT 20
+      `, [userIds]),
+      query(`
+        SELECT COUNT(*)::int AS total FROM food_usage_events
+        WHERE user_id = ANY($1) AND event_type = 'wasted' AND created_at >= NOW() - INTERVAL '30 days'
+      `, [userIds]),
+      query(`
+        SELECT COUNT(*)::int AS total FROM food_usage_events
+        WHERE user_id = ANY($1) AND event_type = 'used' AND created_at >= NOW() - INTERVAL '30 days'
+      `, [userIds]),
     ]);
 
     const expiredCount = expiredRes.rows.length;
     const activeCount = activeRes.rows[0]?.total ?? 0;
-    const total = activeCount + expiredCount;
+    const wastedCount = wastedCountRes.rows[0]?.total ?? 0;
+    const usedCount = usedCountRes.rows[0]?.total ?? 0;
+
+    // "Lãng phí" = food that expired (still sitting in the fridge past its
+    // expiry date) OR that the user explicitly threw away ("Xóa" → a
+    // 'wasted' event). These two sets can't overlap — an expired item still
+    // counted here disappears from `expiredItems` the moment it's deleted,
+    // at which point it's already counted via wastedCount instead — so they
+    // can be summed directly without double counting.
+    const totalWaste = expiredCount + wastedCount;
+    const handledTotal = totalWaste + usedCount;
 
     return {
       expiredItems: expiredRes.rows.map((r) => ({ ...r, quantity: Number(r.quantity) })),
       activeCount,
       expiredCount,
-      wasteRatio: total > 0 ? Math.round((expiredCount / total) * 100) : 0,
+      wasteRatio: handledTotal > 0 ? Math.round((totalWaste / handledTotal) * 100) : 0,
+      wastedEvents: wastedRes.rows.map((r) => ({ ...r, quantity: Number(r.quantity) })),
+      wastedCount,
+      usedCount,
     };
   }
 }

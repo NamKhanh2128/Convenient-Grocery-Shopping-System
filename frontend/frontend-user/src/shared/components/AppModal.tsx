@@ -31,6 +31,8 @@ export function AppModal({
   onPrimary,
   onSecondary,
   onOpenChange,
+  closeOnPrimary = true,
+  closeOnSecondary = true,
 }: {
   open: boolean;
   type?: ModalType;
@@ -41,6 +43,11 @@ export function AppModal({
   onPrimary?: () => void | Promise<void>;
   onSecondary?: () => void;
   onOpenChange: (open: boolean) => void;
+  // Set to false for multi-step flows (e.g. a cooking-steps wizard) where the
+  // primary/secondary action should just advance/go-back state without
+  // closing the dialog — the caller closes it explicitly when actually done.
+  closeOnPrimary?: boolean;
+  closeOnSecondary?: boolean;
 }) {
   const Icon = iconMap[type];
   return (
@@ -54,11 +61,18 @@ export function AppModal({
         </DialogHeader>
         <div className="text-sm text-[#5f586d]">{children}</div>
         <DialogFooter>
-          <Button variant="outline" className="rounded-[8px]" onClick={() => { onSecondary?.(); onOpenChange(false); }}>
+          <Button
+            variant="outline"
+            className="rounded-[8px]"
+            onClick={() => { onSecondary?.(); if (closeOnSecondary) onOpenChange(false); }}
+          >
             {secondaryLabel}
           </Button>
           {primaryLabel && (
-            <Button className="rounded-[8px] bg-[#7655aa]" onClick={async () => { await onPrimary?.(); onOpenChange(false); }}>
+            <Button
+              className="rounded-[8px] bg-[#7655aa]"
+              onClick={async () => { await onPrimary?.(); if (closeOnPrimary) onOpenChange(false); }}
+            >
               {primaryLabel}
             </Button>
           )}

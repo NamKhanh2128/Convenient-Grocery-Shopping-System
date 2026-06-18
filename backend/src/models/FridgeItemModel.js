@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { query, pool } = require('../config/db');
 const schema = require('../config/fridgeSchema');
 
 const { tables: t, columns: c } = schema;
@@ -205,6 +205,85 @@ class FridgeItemModel {
     return inserted.rows[0].id;
   }
 
+  // Runs `fn(client)` inside a transaction, committing on success and rolling
+  // back on any error. Used to keep a fridge mutation (delete/update quantity)
+  // and its food_usage_events log atomic — either both happen or neither does.
+  static async withTransaction(fn) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Best-effort lookup: fridge_items doesn't store a food_id FK, so usage
+  // events resolve it by name. Returns null if no matching catalog food exists.
+  static async resolveFoodIdByName(name, client = { query }) {
+    const { rows } = await client.query(
+      `SELECT id FROM ${t.food} WHERE lower(food_name) = lower($1) LIMIT 1`,
+      [String(name || '').trim()]
+    );
+    return rows[0]?.id || null;
+  }
+
+  // Records a usage/waste event for statistics (food_usage_events table).
+  // eventType: 'used' (consumed via "Dùng" or recipe cooking) | 'wasted' (deleted/thrown away).
+  static async recordUsageEvent({ userId, foodId = null, fridgeItemId = null, eventType, quantity, unitId = null, recipeId = null }, client = { query }) {
+    await client.query(
+      `INSERT INTO food_usage_events (user_id, food_id, fridge_item_id, event_type, quantity, unit_id, recipe_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [Number(userId), foodId, fridgeItemId, eventType, Number(quantity) || 0, unitId, recipeId]
+    );
+  }
+
+  // Deducts `quantity` of an ingredient (matched by name) from the user's
+  // fridge for recipe cooking. Used by RecipeModel.deductIngredientsBestEffort
+  // and markCooked, which previously ran a raw UPDATE that left 0-quantity
+  // rows behind. Now: deletes the row once it's fully consumed and logs a
+  // 'used' event either way, so cooking is reflected in usage statistics.
+  static async deductByName({ userId, name, quantity, recipeId = null }) {
+    return this.withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `SELECT id, quantity, unit_id FROM ${t.item}
+         WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
+         ORDER BY expiration_date ASC
+         LIMIT 1`,
+        [Number(userId), name]
+      );
+      const row = rows[0];
+      if (!row) return;
+
+      const available = Number(row.quantity);
+      const deductAmount = Math.min(Number(quantity) || 0, available);
+      if (deductAmount <= 0) return;
+      const remaining = Math.max(0, Math.round((available - deductAmount) * 1000) / 1000);
+
+      if (remaining <= 0) {
+        await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [row.id]);
+      } else {
+        await client.query(`UPDATE ${t.item} SET quantity = $2, updated_at = NOW() WHERE id = $1`, [row.id, remaining]);
+      }
+
+      const foodId = await this.resolveFoodIdByName(name, client);
+      await this.recordUsageEvent({
+        userId,
+        foodId,
+        fridgeItemId: row.id,
+        eventType: 'used',
+        quantity: deductAmount,
+        unitId: row.unit_id,
+        recipeId,
+      }, client);
+    });
+  }
+
   static async findAll({ userId, familyGroupId, filters = {}, pagination = {} }) {
     const userIds = await this.getFamilyUserIds(userId, familyGroupId);
     const page = Math.max(1, Number(pagination.page) || 1);
@@ -323,35 +402,94 @@ class FridgeItemModel {
     return this.findById(id, userId, familyGroupId);
   }
 
+  // Deleting from the fridge means the food was thrown away — log it as
+  // 'wasted' for the statistics page before removing the row.
   static async softDelete(id, userId, familyGroupId = null) {
     const existing = await this.findById(id, userId, familyGroupId);
     if (!existing) return false;
-    const result = await query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
-    return result.rowCount > 0;
+    return this.withTransaction(async (client) => {
+      const foodId = await this.resolveFoodIdByName(existing.name, client);
+      await this.recordUsageEvent({
+        userId: existing.addedBy.id || userId,
+        foodId,
+        fridgeItemId: Number(id),
+        eventType: 'wasted',
+        quantity: existing.quantity,
+      }, client);
+      const result = await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
+      return result.rowCount > 0;
+    });
   }
 
   static async bulkSoftDelete(ids, userId, familyGroupId = null) {
     const userIds = await this.getFamilyUserIds(userId, familyGroupId);
     const numericIds = ids.filter(isNumericId).map(Number);
     if (!numericIds.length) return 0;
-    const result = await query(
-      `DELETE FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
-      [numericIds, userIds]
-    );
-    return result.rowCount || 0;
+
+    return this.withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `SELECT id, name, quantity, user_id FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
+        [numericIds, userIds]
+      );
+      for (const row of rows) {
+        const foodId = await this.resolveFoodIdByName(row.name, client);
+        await this.recordUsageEvent({
+          userId: row.user_id,
+          foodId,
+          fridgeItemId: row.id,
+          eventType: 'wasted',
+          quantity: row.quantity,
+        }, client);
+      }
+
+      const result = await client.query(
+        `DELETE FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
+        [numericIds, userIds]
+      );
+      return result.rowCount || 0;
+    });
   }
 
+  // action='use': consuming food via the "Dùng" action. If it fully empties the
+  // item, delete the row instead of leaving a 0-quantity entry, and log a
+  // 'used' event for statistics. action='restock' just adds quantity back
+  // (e.g. correcting an earlier over-consumption) — no event logged.
   static async updateQuantity(id, quantityUsed, action, userId, familyGroupId = null) {
     const existing = await this.findById(id, userId, familyGroupId);
     if (!existing) return null;
-    await query(
-      `UPDATE ${t.item}
-       SET quantity = CASE WHEN $3 = 'restock' THEN quantity + $2 ELSE GREATEST(quantity - $2, 0) END,
-           updated_at = NOW()
-       WHERE id = $1`,
-      [Number(id), Number(quantityUsed), action]
-    );
-    return this.findById(id, userId, familyGroupId);
+
+    if (action === 'restock') {
+      await query(
+        `UPDATE ${t.item} SET quantity = quantity + $2, updated_at = NOW() WHERE id = $1`,
+        [Number(id), Number(quantityUsed)]
+      );
+      return { deleted: false, item: await this.findById(id, userId, familyGroupId) };
+    }
+
+    const usedAmount = Math.min(Number(quantityUsed) || 0, existing.quantity);
+    const remaining = Math.max(0, Math.round((existing.quantity - usedAmount) * 1000) / 1000);
+
+    await this.withTransaction(async (client) => {
+      if (remaining <= 0) {
+        await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
+      } else {
+        await client.query(`UPDATE ${t.item} SET quantity = $2, updated_at = NOW() WHERE id = $1`, [Number(id), remaining]);
+      }
+
+      const foodId = await this.resolveFoodIdByName(existing.name, client);
+      await this.recordUsageEvent({
+        userId: existing.addedBy.id || userId,
+        foodId,
+        fridgeItemId: Number(id),
+        eventType: 'used',
+        quantity: usedAmount,
+      }, client);
+    });
+
+    return {
+      deleted: remaining <= 0,
+      item: remaining <= 0 ? null : await this.findById(id, userId, familyGroupId),
+    };
   }
 
   static async findExpiring(userId, daysAhead = 3, familyGroupId = null) {

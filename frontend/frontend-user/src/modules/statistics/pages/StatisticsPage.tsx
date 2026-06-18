@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart2, Flame, Leaf, ShoppingCart, Trash2, TrendingUp } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart2, CalendarClock, Flame, Leaf, ShoppingCart, Trash2, TrendingUp } from "lucide-react";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { ScreenHeader } from "@/shared/components/ScreenHeader";
-import { statisticsApi, type CategoryStat, type DailyActivity, type ExpiredItem, type FoodTrend } from "../api/statisticsApi";
+import { statisticsApi, type CategoryStat, type DailyActivity, type ExpiredItem, type FoodTrend, type PurchaseTrend } from "../api/statisticsApi";
 
 const COLORS = ["#7655aa", "#ffb11f", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3"];
 
@@ -28,6 +28,7 @@ export function StatisticsPage() {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<Awaited<ReturnType<typeof statisticsApi.getOverview>> | null>(null);
   const [dailyData, setDailyData] = useState<DailyActivity[]>([]);
+  const [purchaseTrend, setPurchaseTrend] = useState<PurchaseTrend>({ categories: [], days: [] });
   const [categoryBar, setCategoryBar] = useState<CategoryStat[]>([]);
   const [trends, setTrends] = useState<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] } | null>(null);
   const [waste, setWaste] = useState<{ expiredItems: ExpiredItem[]; activeCount: number; expiredCount: number; wasteRatio: number } | null>(null);
@@ -39,15 +40,17 @@ export function StatisticsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [ov, daily, catBar, tr, ws] = await Promise.all([
+        const [ov, daily, purchases, catBar, tr, ws] = await Promise.all([
           statisticsApi.getOverview(family.family_id),
           statisticsApi.getDailyActivity(family.family_id),
+          statisticsApi.getPurchaseTrend(family.family_id),
           statisticsApi.getCategoryBar(family.family_id),
           statisticsApi.getFoodTrends(family.family_id),
           statisticsApi.getWasteReport(family.family_id),
         ]);
         setOverview(ov);
         setDailyData(daily);
+        setPurchaseTrend(purchases);
         setCategoryBar(catBar);
         setTrends(tr);
         setWaste(ws);
@@ -144,6 +147,30 @@ export function StatisticsPage() {
                     </ResponsiveContainer>
                   )}
                 </div>
+              </div>
+
+              <div className="rounded-[8px] bg-white p-5 shadow-card">
+                <h3 className="mb-1 flex items-center gap-2 font-extrabold text-[#3b2868]">
+                  <CalendarClock className="h-5 w-5 text-[#7655aa]" />
+                  Thực phẩm đã mua theo thời gian
+                </h3>
+                <p className="mb-3 text-xs text-[#9188a1]">Số mặt hàng đã mua mỗi ngày, chia theo danh mục (mỗi sản phẩm tính 1, không cộng dồn số lượng vì đơn vị khác nhau).</p>
+                {purchaseTrend.days.every((d) => d.total === 0) ? (
+                  <p className="py-8 text-center text-sm text-[#9188a1]">Chưa có dữ liệu mua sắm trong 7 ngày qua.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={purchaseTrend.days}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip formatter={(value, name) => [`${value} mặt hàng`, name]} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {purchaseTrend.categories.map((cat, i) => (
+                        <Bar key={cat} dataKey={cat} stackId="purchases" fill={COLORS[i % COLORS.length]} radius={i === purchaseTrend.categories.length - 1 ? [4, 4, 0, 0] : undefined} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
 
               {overview.wastePercentage > 20 && (

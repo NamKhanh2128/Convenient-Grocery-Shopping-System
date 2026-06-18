@@ -19,7 +19,7 @@ export function MealPlanCalendar({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] bg-white p-3 shadow-card">
         <div className="flex items-center gap-3">
           <button
             onClick={prevWeek}

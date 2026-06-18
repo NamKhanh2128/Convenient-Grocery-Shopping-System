@@ -114,6 +114,8 @@ interface MealPlanState {
 
   createShoppingFromMissing: (familyId: string, userId: string) => Promise<void>;
 
+  createShoppingFromMissingForDate: (familyId: string, userId: string, date: string) => Promise<void>;
+
   autoGenerateMealPlan: (mode: "day" | "week", overwrite?: boolean) => Promise<void>;
 
 }
@@ -178,7 +180,13 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
       }).catch(() => set({ suggestions: [] }));
 
-      void mealApi.getMissingIngredients(familyId, days[0], days[6]).then((planMissing) => {
+      // "Missing ingredients for the week" should only count from today
+      // onward — no point shopping for days that already passed. When
+      // browsing a future or past week, today falls outside [days[0],
+      // days[6]] so the range is left as the full week.
+      const today = localIso(new Date());
+      const missingFrom = today >= days[0] && today <= days[6] ? today : days[0];
+      void mealApi.getMissingIngredients(familyId, missingFrom, days[6]).then((planMissing) => {
 
         set({ planMissing });
 
@@ -373,13 +381,32 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
 
 
+  // Used by the per-day detail popup: only the missing ingredients for that
+  // single date, not the whole week's planMissing.
+  createShoppingFromMissingForDate: async (familyId, userId, date) => {
+
+    const missing = await mealApi.getMissingIngredients(familyId, date, date);
+
+    await mealApi.createShoppingFromPlan(familyId, userId, missing);
+
+    await get().loadWeek(familyId);
+
+  },
+
+
+
   autoGenerateMealPlan: async (mode, overwrite = false) => {
 
-    const { familyId, weekAnchor, weekDays } = get();
+    const { familyId, weekDays } = get();
 
     if (!familyId) return;
-
-    const anchorDate = mode === "week" ? weekDays[0] : localIso(new Date());
+    const today = localIso(new Date());
+    // For "week" mode: if browsing the week that contains today, start from
+    // today (so it fills today..Sunday, not the already-passed Mon..today-1).
+    // For a future/past week, weekDays[0] (its Monday) is used as before.
+    const anchorDate = mode === "week"
+      ? (today >= weekDays[0] && today <= weekDays[6] ? today : weekDays[0])
+      : today;
 
     await mealApi.autoGenerate(familyId, mode, anchorDate, overwrite);
 

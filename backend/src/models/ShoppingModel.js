@@ -114,13 +114,18 @@ class ShoppingModel {
   }
 
   async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, purchasedBy = null) {
+    // $8 (purchasedBy) is only ever read inside the CASE's THEN branch, so
+    // Postgres can't infer its type from the `purchased_by` column (an
+    // untyped/ambiguous parameter inside CASE...ELSE NULL defaults to text),
+    // causing "column purchased_by is of type integer but expression is of
+    // type text". Cast explicitly so it always binds as integer.
     await dbQuery(
       `UPDATE shopping_list_items
        SET bought_quantity = $1, remaining_quantity = $2, item_status = $3, is_purchased = $4,
            bought_status = $4,
            inventory_synced_quantity = $5,
            purchased_at = CASE WHEN $6 = TRUE THEN NOW() ELSE purchased_at END,
-           purchased_by = CASE WHEN $7 > 0 THEN $8 ELSE NULL END
+           purchased_by = CASE WHEN $7::numeric > 0 THEN $8::integer ELSE NULL END
        WHERE id = $9`,
       [boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, isPurchased, boughtQuantity, purchasedBy, itemId]
     );

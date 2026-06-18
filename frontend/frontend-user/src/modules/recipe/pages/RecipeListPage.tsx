@@ -78,7 +78,7 @@ export function RecipeListPage() {
       />
 
       {popular.length > 0 && (
-        <section className="mb-6">
+        <section className="mb-6 rounded-[8px] bg-white p-4 shadow-card">
           <div className="mb-3 flex items-center gap-2">
             <Flame className="h-4 w-4 text-orange-500" />
             <h2 className="text-sm font-bold text-gray-700">Công thức phổ biến</h2>

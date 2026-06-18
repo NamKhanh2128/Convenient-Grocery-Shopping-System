@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const ShoppingService = require('../services/ShoppingService');
+const FridgeItemModel = require('./FridgeItemModel');
 
 function isNumericId(value) {
   return /^\d+$/.test(String(value ?? ''));
@@ -59,17 +60,30 @@ class RecipeModel {
   }
 
   static async getPopular({ userId, limit = 5 }) {
+    // Combines two cook-tracking sources so a recipe's popularity reflects
+    // however it was cooked: via the meal plan ("Đã nấu" → meal_plan_items.
+    // is_cooked) or directly on the recipe page ("Sau khi nấu" → a 'cooked'
+    // food_usage_events row, one per cook action — see markCooked above).
     const { rows } = await query(
       `SELECT r.*,
-              COUNT(mpi.id)::int AS cook_count,
+              (COALESCE(mp_count.cnt, 0) + COALESCE(direct_count.cnt, 0))::int AS cook_count,
               (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) AS ingredient_count
        FROM recipes r
-       JOIN meal_plan_items mpi ON mpi.recipe_id = r.id
-       JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-       WHERE mpi.is_cooked = true
-         AND mp.user_id = $1
-         AND (r.is_public = true OR r.created_by = $1)
-       GROUP BY r.id
+       LEFT JOIN (
+         SELECT mpi.recipe_id, COUNT(*) AS cnt
+         FROM meal_plan_items mpi
+         JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
+         WHERE mpi.is_cooked = true AND mp.user_id = $1
+         GROUP BY mpi.recipe_id
+       ) mp_count ON mp_count.recipe_id = r.id
+       LEFT JOIN (
+         SELECT recipe_id, COUNT(*) AS cnt
+         FROM food_usage_events
+         WHERE event_type = 'cooked' AND user_id = $1 AND recipe_id IS NOT NULL
+         GROUP BY recipe_id
+       ) direct_count ON direct_count.recipe_id = r.id
+       WHERE (r.is_public = true OR r.created_by = $1)
+         AND (COALESCE(mp_count.cnt, 0) + COALESCE(direct_count.cnt, 0)) > 0
        ORDER BY cook_count DESC
        LIMIT $2`,
       [Number(userId), Math.max(1, Number(limit) || 5)]
@@ -330,43 +344,65 @@ class RecipeModel {
   }
 
   static async getMissingForPlan({ userId, fromDate, toDate }) {
-    // Get unique recipe IDs planned for the date range
+    // Count how many times each recipe is planned in the range — a recipe
+    // cooked 3 times that week needs 3x its ingredients, not just 1x. The
+    // previous DISTINCT-recipe_id version collapsed repeats and under-counted.
     const { rows: planItems } = await query(
-      `SELECT DISTINCT mpi.recipe_id
+      `SELECT mpi.recipe_id, COUNT(*)::int AS occurrences
        FROM meal_plan_items mpi
        JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
        WHERE mp.user_id = $1
-         AND mpi.meal_date BETWEEN $2 AND $3`,
+         AND mpi.meal_date BETWEEN $2 AND $3
+       GROUP BY mpi.recipe_id`,
       [Number(userId), fromDate, toDate]
     );
     if (!planItems.length) return [];
 
-    const recipeIds = planItems.map((r) => Number(r.recipe_id));
+    const occurrencesByRecipe = new Map(planItems.map((r) => [Number(r.recipe_id), r.occurrences]));
+    const recipeIds = [...occurrencesByRecipe.keys()];
 
-    // Aggregate total ingredient needs across all planned recipes
     const { rows: ingredients } = await query(
-      `SELECT ri.name, COALESCE(SUM(ri.quantity), 0) AS total_quantity,
+      `SELECT ri.recipe_id, ri.name, ri.quantity,
               u.symbol AS unit_symbol, u.name AS unit_name
        FROM recipe_ingredients ri
        LEFT JOIN units u ON u.id = ri.unit_id
-       WHERE ri.recipe_id = ANY($1::int[])
-       GROUP BY ri.name, u.symbol, u.name`,
+       WHERE ri.recipe_id = ANY($1::int[])`,
       [recipeIds]
     );
     if (!ingredients.length) return [];
+
+    // Combine by normalized name (case/accent-insensitive) so the same
+    // ingredient typed differently across recipes (e.g. "Cà chua" vs "cà
+    // chua") still merges into a single line instead of splitting quantities.
+    const totals = new Map();
+    for (const ing of ingredients) {
+      const occurrences = occurrencesByRecipe.get(Number(ing.recipe_id)) || 1;
+      const key = normalizeText(ing.name);
+      const needed = (Number(ing.quantity) || 0) * occurrences;
+      const existing = totals.get(key);
+      if (existing) {
+        existing.total += needed;
+      } else {
+        totals.set(key, {
+          food_name: ing.name,
+          total: needed,
+          unit: ing.unit_symbol || ing.unit_name || 'g',
+        });
+      }
+    }
 
     // Get fridge stock once
     const stock = await this.getStock(userId);
 
     const missing = [];
-    for (const ing of ingredients) {
-      const available = stock.get(normalizeText(ing.name)) || 0;
-      const needed = Number(ing.total_quantity) || 1;
+    for (const [key, ing] of totals) {
+      const available = stock.get(key) || 0;
+      const needed = ing.total || 1;
       if (available < needed) {
         missing.push({
-          food_name: ing.name,
+          food_name: ing.food_name,
           quantity: Number((needed - available).toFixed(2)),
-          unit: ing.unit_symbol || ing.unit_name || 'g',
+          unit: ing.unit,
         });
       }
     }
@@ -387,17 +423,12 @@ class RecipeModel {
     const recipe = await this.findById({ id: recipeId, userId });
     if (!recipe) return;
     for (const ing of recipe.nguyen_lieu) {
-      await query(
-        `UPDATE fridge_items
-         SET quantity = GREATEST(quantity - $3, 0), updated_at = NOW()
-         WHERE id = (
-           SELECT id FROM fridge_items
-           WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
-           ORDER BY expiration_date ASC
-           LIMIT 1
-         )`,
-        [Number(userId), ing.ten_nguyen_lieu, Number(ing.so_luong) || 1]
-      );
+      await FridgeItemModel.deductByName({
+        userId,
+        name: ing.ten_nguyen_lieu,
+        quantity: Number(ing.so_luong) || 1,
+        recipeId,
+      });
     }
   }
 
@@ -406,18 +437,22 @@ class RecipeModel {
     if (!result) throw new Error('Không tìm thấy công thức');
     if (result.missing.length) throw new Error('Không thể trừ đủ nguyên liệu');
     for (const ing of result.recipe.nguyen_lieu) {
-      await query(
-        `UPDATE fridge_items
-         SET quantity = GREATEST(quantity - $3, 0), updated_at = NOW()
-         WHERE id = (
-           SELECT id FROM fridge_items
-           WHERE user_id = $1 AND lower(name) = lower($2) AND quantity > 0
-           ORDER BY expiration_date ASC
-           LIMIT 1
-         )`,
-        [Number(userId), ing.ten_nguyen_lieu, Number(ing.so_luong) || 1]
-      );
+      await FridgeItemModel.deductByName({
+        userId,
+        name: ing.ten_nguyen_lieu,
+        quantity: Number(ing.so_luong) || 1,
+        recipeId,
+      });
     }
+    // One summary 'cooked' event per cook action (not per ingredient) so
+    // cooking directly from the recipe detail page ("Sau khi nấu") counts
+    // toward "Công thức phổ biến", same as cooking via the meal plan.
+    await FridgeItemModel.recordUsageEvent({
+      userId,
+      eventType: 'cooked',
+      quantity: 1,
+      recipeId,
+    });
     return { updated: true };
   }
 

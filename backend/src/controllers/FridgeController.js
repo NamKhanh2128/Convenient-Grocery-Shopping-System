@@ -234,7 +234,7 @@ class FridgeController {
       }
 
       const { userId, familyGroupId } = getUserContext(req);
-      const item = await FridgeItemModel.updateQuantity(
+      const result = await FridgeItemModel.updateQuantity(
         req.params.id,
         Number(quantityUsed),
         action,
@@ -242,14 +242,14 @@ class FridgeController {
         familyGroupId,
       );
 
-      if (!item) {
+      if (!result) {
         return res.status(404).json({ success: false, message: 'Không tìm thấy thực phẩm' });
       }
 
       return res.status(200).json({
         success: true,
-        data: { item },
-        message: 'Cập nhật số lượng thành công',
+        data: { item: result.item, deleted: result.deleted },
+        message: result.deleted ? 'Đã dùng hết và xóa khỏi tủ lạnh' : 'Cập nhật số lượng thành công',
       });
     } catch (error) {
       console.error('[FridgeController.updateQuantity]', error);

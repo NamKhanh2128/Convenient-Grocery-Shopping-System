@@ -18,6 +18,15 @@ export interface ExpiredItem {
   expiry_date: string;
   location: string;
 }
+export interface PurchaseTrendDay {
+  date: string;
+  total: number;
+  [category: string]: string | number;
+}
+export interface PurchaseTrend {
+  categories: string[];
+  days: PurchaseTrendDay[];
+}
 
 function params(familyId: string) {
   return { params: { familyGroupId: familyId } };
@@ -48,6 +57,12 @@ export const statisticsApi = {
     );
   },
 
+  async getPurchaseTrend(family_id: string): Promise<PurchaseTrend> {
+    return unwrapApiData<PurchaseTrend>(
+      await apiClient.get("/stats/purchase-trend", params(family_id))
+    );
+  },
+
   async getFoodTrends(family_id: string): Promise<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] }> {
     return unwrapApiData<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] }>(
       await apiClient.get("/stats/food-trends", params(family_id))
@@ -60,6 +75,8 @@ export const statisticsApi = {
       activeCount: number;
       expiredCount: number;
       wasteRatio: number;
+      wastedCount: number;
+      usedCount: number;
     }>(await apiClient.get("/stats/waste-report", params(family_id)));
   },
 };

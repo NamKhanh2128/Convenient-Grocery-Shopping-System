@@ -59,6 +59,18 @@ class StatsController {
     }
   }
 
+  static async purchaseTrend(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const data = await StatsModel.getPurchaseTrend(familyId);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.purchaseTrend]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
   static async wasteReport(req, res) {
     try {
       const familyId = getFamilyId(req);

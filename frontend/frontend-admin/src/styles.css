@@ -60,6 +60,11 @@
 }
 
 :root {
+  /* No dark mode in this app — without this, native controls (date inputs,
+   * calendar-picker icon, scrollbars) follow the OS/browser color scheme.
+   * On a system in dark mode, Chrome renders date input text/icons light by
+   * default, making them invisible on our white input backgrounds. */
+  color-scheme: light;
   --radius: 1rem;
   --background: oklch(0.97 0.005 280);
   --foreground: oklch(0.18 0.04 280);
