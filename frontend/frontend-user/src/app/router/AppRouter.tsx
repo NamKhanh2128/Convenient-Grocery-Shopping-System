@@ -5,7 +5,6 @@ import { LoginPage } from "@/modules/auth/pages/LoginPage";
 import { RegisterPage } from "@/modules/auth/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/modules/auth/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/modules/auth/pages/ResetPasswordPage";
-import { OAuthCallbackPage } from "@/pages/oauth/OAuthCallbackPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { FridgePage } from "@/modules/fridge/pages/FridgePage";
 import { FridgeFormPage } from "@/modules/fridge/pages/FridgeFormPage";
@@ -63,7 +62,6 @@ export function AppRouter() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
         {/* Public invitation accept route - accessible without auth */}
         <Route path="/invitations/accept" element={<InvitationAcceptPage />} />
         <Route element={<ProtectedRoute />}>

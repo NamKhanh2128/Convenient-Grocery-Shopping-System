@@ -18,8 +18,6 @@ export const translations = {
     loginSubtitle: "Trang quản trị hệ thống NATEAT — chỉ dành cho quản trị viên.",
     loginButton: "Đăng nhập",
     loginLoading: "Đang đăng nhập...",
-    orContinueWith: "Hoặc tiếp tục với",
-    continueWithGoogle: "Đăng nhập với Google",
     fieldEmail: "Email",
     fieldPassword: "Mật khẩu",
 
@@ -184,8 +182,6 @@ export const translations = {
     loginSubtitle: "NATEAT admin panel — for administrators only.",
     loginButton: "Sign in",
     loginLoading: "Signing in...",
-    orContinueWith: "Or continue with",
-    continueWithGoogle: "Continue with Google",
     fieldEmail: "Email",
     fieldPassword: "Password",
 
@@ -338,8 +334,6 @@ export const translations = {
     loginSubtitle: "NATEAT管理パネル — 管理者専用。",
     loginButton: "サインイン",
     loginLoading: "サインイン中...",
-    orContinueWith: "または次で続行",
-    continueWithGoogle: "Googleで続行",
     fieldEmail: "メールアドレス",
     fieldPassword: "パスワード",
 

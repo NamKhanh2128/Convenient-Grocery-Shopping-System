@@ -21,15 +21,6 @@ const authController = {
     }
   },
 
-  async loginWithGoogle(req, res) {
-    try {
-      const { supabaseAccessToken } = req.body || {};
-      return send(res, await authService.loginWithGoogle({ supabaseAccessToken }));
-    } catch (error) {
-      return res.status(500).json({ message: error.message });
-    }
-  },
-
   async refresh(req, res) {
     try {
       return send(res, await authService.refresh(req.body?.refreshToken));

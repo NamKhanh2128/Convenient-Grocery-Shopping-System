@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const { authSchema } = require('../config/authSchema');
 const { pool } = require('../config/db');
 const { emailService } = require('./emailService');
-const { oauthService } = require('./oauthService');
 
 const MISSING_INFO_MESSAGE = 'Vui lòng nhập đầy đủ thông tin';
 const INVALID_TOKEN_MESSAGE = 'Token không hợp lệ hoặc đã hết hạn';
@@ -39,20 +38,17 @@ function ensurePasswordResetSchema() {
   return passwordResetSchemaReadyPromise;
 }
 
-let oauthSchemaReadyPromise;
+let userExtraSchemaReadyPromise;
 
-function ensureOAuthSchema() {
-  if (!oauthSchemaReadyPromise) {
-    oauthSchemaReadyPromise = pool.query(`
-      ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS google_id VARCHAR UNIQUE;
+function ensureUserExtraSchema() {
+  if (!userExtraSchemaReadyPromise) {
+    userExtraSchemaReadyPromise = pool.query(`
       ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS avatar_url VARCHAR;
-      ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS auth_provider VARCHAR NOT NULL DEFAULT 'local';
       ALTER TABLE ${u.table} ADD COLUMN IF NOT EXISTS password_plain VARCHAR;
-      ALTER TABLE ${u.table} ALTER COLUMN ${u.password} DROP NOT NULL;
     `);
   }
 
-  return oauthSchemaReadyPromise;
+  return userExtraSchemaReadyPromise;
 }
 
 function isBlank(value) {
@@ -145,59 +141,6 @@ async function findUserById(userId) {
      WHERE ${u.id}::text = $1
      LIMIT 1`,
     [String(userId)]
-  );
-
-  return normalizeUser(rows[0]);
-}
-
-async function findUserByGoogleId(googleId) {
-  const { rows } = await pool.query(
-    `SELECT
-      ${u.id} AS user_id,
-      ${u.fullName} AS full_name,
-      ${u.email} AS email,
-      ${u.role} AS role,
-      phone,
-      avatar_url
-     FROM ${u.table}
-     WHERE google_id = $1
-     LIMIT 1`,
-    [googleId]
-  );
-
-  return normalizeUser(rows[0]);
-}
-
-async function linkGoogleAccount(userId, { googleId, avatarUrl }) {
-  const { rows } = await pool.query(
-    `UPDATE ${u.table}
-     SET google_id = $2, avatar_url = COALESCE(avatar_url, $3), updated_at = NOW()
-     WHERE ${u.id} = $1
-     RETURNING
-      ${u.id} AS user_id,
-      ${u.fullName} AS full_name,
-      ${u.email} AS email,
-      ${u.role} AS role,
-      phone,
-      avatar_url`,
-    [userId, googleId, avatarUrl]
-  );
-
-  return normalizeUser(rows[0]);
-}
-
-async function createGoogleUser({ fullName, email, googleId, avatarUrl }) {
-  const { rows } = await pool.query(
-    `INSERT INTO ${u.table} (${u.fullName}, ${u.email}, ${u.role}, google_id, avatar_url, auth_provider, ${u.password})
-     VALUES ($1, $2, 'user', $3, $4, 'google', NULL)
-     RETURNING
-      ${u.id} AS user_id,
-      ${u.fullName} AS full_name,
-      ${u.email} AS email,
-      ${u.role} AS role,
-      phone,
-      avatar_url`,
-    [fullName, email, googleId, avatarUrl]
   );
 
   return normalizeUser(rows[0]);
@@ -405,7 +348,7 @@ const authService = {
       return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
     }
 
-    await ensureOAuthSchema();
+    await ensureUserExtraSchema();
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const existingUser = await findUserByEmail(normalizedEmail);
@@ -429,7 +372,7 @@ const authService = {
       return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
     }
 
-    await ensureOAuthSchema();
+    await ensureUserExtraSchema();
 
     const user = await findUserByEmail(String(email).trim().toLowerCase());
     if (!user) {
@@ -482,71 +425,6 @@ const authService = {
         accessToken,
         refreshToken,
         user: safeUser,
-      },
-    };
-  },
-
-  async loginWithGoogle({ supabaseAccessToken }) {
-    if (isBlank(supabaseAccessToken)) {
-      return { status: 400, body: { message: MISSING_INFO_MESSAGE } };
-    }
-
-    let supabaseUser;
-    try {
-      supabaseUser = await oauthService.verifyGoogleAccessToken(supabaseAccessToken);
-    } catch (error) {
-      return { status: 401, body: { message: error.message } };
-    }
-
-    const googleId = supabaseUser.id;
-    const email = String(supabaseUser.email || '').trim().toLowerCase();
-    if (!googleId || !email) {
-      return { status: 400, body: { message: 'Không lấy được thông tin tài khoản Google' } };
-    }
-
-    const emailConfirmed = Boolean(supabaseUser.email_confirmed_at || supabaseUser.confirmed_at);
-    const metadata = supabaseUser.user_metadata || {};
-    const fullName = metadata.full_name || metadata.name || email.split('@')[0];
-    const avatarUrl = metadata.avatar_url || metadata.picture || null;
-
-    await ensureOAuthSchema();
-
-    let user = await findUserByGoogleId(googleId);
-
-    if (!user) {
-      const existing = await findUserByEmail(email);
-      if (existing) {
-        if (!emailConfirmed) {
-          return { status: 409, body: { message: 'Email Google chưa được xác thực, không thể liên kết tài khoản.' } };
-        }
-        if (existing.is_locked) {
-          return { status: 403, body: { message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.' } };
-        }
-        user = await linkGoogleAccount(existing.user_id, { googleId, avatarUrl });
-      } else {
-        user = await createGoogleUser({ fullName, email, googleId, avatarUrl });
-      }
-    }
-
-    await registerSuccessfulLogin(user.user_id);
-
-    const accessToken = authTokenService.createAccessToken(user);
-    const refreshToken = authTokenService.createRefreshToken(user);
-    const expiresAt = authTokenService.getRefreshTokenExpiresAt(refreshToken);
-
-    await createRefreshToken({
-      userId: user.user_id,
-      token: refreshToken,
-      expiresAt,
-    });
-
-    return {
-      status: 200,
-      body: {
-        message: 'Đăng nhập Google thành công',
-        accessToken,
-        refreshToken,
-        user,
       },
     };
   },

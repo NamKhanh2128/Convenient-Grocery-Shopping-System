@@ -9,7 +9,6 @@ export const endpoints = {
     updateProfile: "/auth/update-profile",
     forgotPassword: "/auth/forgot-password",
     resetPassword: "/auth/reset-password",
-    oauthGoogle: "/auth/oauth/google",
   },
   foods: "/foods",
   fridge: "/fridge-items",
