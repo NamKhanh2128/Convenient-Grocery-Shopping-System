@@ -95,12 +95,18 @@ class StatsModel {
   // event_type='used', logged by FridgeItemModel on "Dùng" and on recipe
   // cooking deductions), NOT current fridge stock. Excludes the per-cook
   // 'cooked' summary events, which carry no real ingredient quantity.
+  //
+  // Counts usage EVENTS (lần sử dụng), not summed quantity: items within the
+  // same category use different units (kg, g, quả, củ, gói...), so adding
+  // their raw quantities together — even with a unit label slapped on —
+  // would still be meaningless/wrong. Counting occurrences is unit-agnostic
+  // and the unit is always valid: "lần".
   static async getCategoryBar(familyId) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
 
     const { rows } = await query(`
-      SELECT COALESCE(fc.name_vi, 'Khác') AS category, SUM(fue.quantity)::float AS count
+      SELECT COALESCE(fc.name_vi, 'Khác') AS category, COUNT(*)::int AS count
       FROM food_usage_events fue
       LEFT JOIN foods f ON f.id = fue.food_id
       LEFT JOIN food_categories fc ON fc.id = f.category_id

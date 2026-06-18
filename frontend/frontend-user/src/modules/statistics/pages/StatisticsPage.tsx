@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieCh
 import { BarChart2, CalendarClock, Flame, Leaf, ShoppingCart, Trash2, TrendingUp } from "lucide-react";
 import { useAuthStore } from "@/modules/auth/store/authStore";
 import { ScreenHeader } from "@/shared/components/ScreenHeader";
-import { statisticsApi, type CategoryStat, type DailyActivity, type ExpiredItem, type FoodTrend, type PurchaseTrend } from "../api/statisticsApi";
+import { statisticsApi, type CategoryStat, type DailyActivity, type ExpiredItem, type FoodTrend, type PurchaseTrend, type WastedEvent } from "../api/statisticsApi";
 
 const COLORS = ["#7655aa", "#ffb11f", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3"];
 
@@ -31,7 +31,15 @@ export function StatisticsPage() {
   const [purchaseTrend, setPurchaseTrend] = useState<PurchaseTrend>({ categories: [], days: [] });
   const [categoryBar, setCategoryBar] = useState<CategoryStat[]>([]);
   const [trends, setTrends] = useState<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] } | null>(null);
-  const [waste, setWaste] = useState<{ expiredItems: ExpiredItem[]; activeCount: number; expiredCount: number; wasteRatio: number } | null>(null);
+  const [waste, setWaste] = useState<{
+    expiredItems: ExpiredItem[];
+    activeCount: number;
+    expiredCount: number;
+    wasteRatio: number;
+    wastedCount: number;
+    usedCount: number;
+    wastedEvents: WastedEvent[];
+  } | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -184,17 +192,18 @@ export function StatisticsPage() {
           {tab === "consumption" && trends && (
             <div className="space-y-6">
               <div className="rounded-[8px] bg-white p-5 shadow-card">
-                <h3 className="mb-4 font-extrabold text-[#3b2868]">Tiêu thụ theo danh mục</h3>
+                <h3 className="mb-1 font-extrabold text-[#3b2868]">Tiêu thụ theo danh mục</h3>
+                <p className="mb-3 text-xs text-[#9188a1]">Số lần đã dùng/nấu mỗi danh mục (đơn vị: lần) — không cộng dồn số lượng vì mỗi món có đơn vị khác nhau (kg, quả, gói...).</p>
                 {categoryBar.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-[#9188a1]">Chưa có dữ liệu tiêu thụ.</p>
+                  <p className="py-8 text-center text-sm text-[#9188a1]">Chưa có dữ liệu tiêu thụ. Hãy bấm "Dùng" trong tủ lạnh hoặc đánh dấu "Đã nấu" để bắt đầu ghi nhận.</p>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={categoryBar}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
                       <XAxis dataKey="category" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Số lượng">
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} unit=" lần" />
+                      <Tooltip formatter={(value) => [`${value} lần`, "Đã dùng"]} />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Số lần đã dùng">
                         {categoryBar.map((_, i) => (
                           <Cell key={i} fill={COLORS[i % COLORS.length]} />
                         ))}
@@ -260,14 +269,68 @@ export function StatisticsPage() {
           {tab === "waste" && waste && (
             <div className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-3">
-                <StatCard icon={<Leaf className="h-6 w-6 text-white" />} label="Còn sử dụng được" value={waste.activeCount} color="bg-green-500" />
-                <StatCard icon={<Trash2 className="h-6 w-6 text-white" />} label="Đã hết hạn" value={waste.expiredCount} color="bg-red-400" />
-                <StatCard icon={<BarChart2 className="h-6 w-6 text-white" />} label="Tỷ lệ lãng phí" value={`${waste.wasteRatio}%`} color="bg-amber-400" />
+                <StatCard icon={<Leaf className="h-6 w-6 text-white" />} label="Đã sử dụng (30 ngày)" sub='Bấm "Dùng" hoặc nấu xong' value={waste.usedCount} color="bg-green-500" />
+                <StatCard icon={<Trash2 className="h-6 w-6 text-white" />} label="Đã vứt bỏ (30 ngày)" sub='Bấm "Xóa" trong tủ lạnh' value={waste.wastedCount} color="bg-red-400" />
+                <StatCard icon={<BarChart2 className="h-6 w-6 text-white" />} label="Tỷ lệ lãng phí" sub="Vứt bỏ + hết hạn / tổng xử lý" value={`${waste.wasteRatio}%`} color="bg-amber-400" />
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className="rounded-[8px] bg-white p-5 shadow-card">
-                  <h3 className="mb-4 font-extrabold text-[#3b2868]">Biểu đồ sử dụng vs lãng phí</h3>
+                  <h3 className="mb-1 font-extrabold text-[#3b2868]">Sử dụng vs Vứt bỏ (30 ngày)</h3>
+                  <p className="mb-3 text-xs text-[#9188a1]">Tính từ hành động thật: bấm "Dùng"/nấu xong = sử dụng; bấm "Xóa" thực phẩm = vứt bỏ.</p>
+                  {waste.usedCount + waste.wastedCount === 0 ? (
+                    <p className="py-8 text-center text-sm text-[#9188a1]">Chưa có hoạt động nào trong 30 ngày qua.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Đã sử dụng", value: waste.usedCount },
+                            { name: "Đã vứt bỏ", value: waste.wastedCount },
+                          ]}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(0) : 0}%`}
+                        >
+                          <Cell fill="#66c2a5" />
+                          <Cell fill="#fc8d62" />
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${value} lần`, ""]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                <div className="rounded-[8px] bg-white p-5 shadow-card">
+                  <h3 className="mb-3 font-extrabold text-[#3b2868]">Đã vứt bỏ gần đây</h3>
+                  {waste.wastedEvents.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                      <span className="text-4xl">✅</span>
+                      <p className="text-sm font-semibold text-green-700">Chưa vứt bỏ thực phẩm nào trong 30 ngày qua!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {waste.wastedEvents.map((ev) => (
+                        <div key={ev.event_id} className="flex items-center gap-3 rounded-[8px] bg-red-50 px-3 py-2">
+                          <span className="text-xl">{ev.icon}</span>
+                          <div className="flex-1">
+                            <div className="text-sm font-bold">{ev.food_name}</div>
+                            <div className="text-xs text-[#9188a1]">{ev.quantity} · Vứt ngày {ev.wasted_date}</div>
+                          </div>
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">Đã vứt</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-[8px] bg-white p-5 shadow-card">
+                  <h3 className="mb-4 font-extrabold text-[#3b2868]">Trạng thái tủ lạnh hiện tại</h3>
                   {waste.activeCount + waste.expiredCount === 0 ? (
                     <p className="py-8 text-center text-sm text-[#9188a1]">Tủ lạnh đang trống.</p>
                   ) : (
@@ -295,7 +358,7 @@ export function StatisticsPage() {
                 </div>
 
                 <div className="rounded-[8px] bg-white p-5 shadow-card">
-                  <h3 className="mb-3 font-extrabold text-[#3b2868]">Thực phẩm đã hết hạn</h3>
+                  <h3 className="mb-3 font-extrabold text-[#3b2868]">Thực phẩm đã hết hạn (chưa xóa)</h3>
                   {waste.expiredItems.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 py-8 text-center">
                       <span className="text-4xl">✅</span>

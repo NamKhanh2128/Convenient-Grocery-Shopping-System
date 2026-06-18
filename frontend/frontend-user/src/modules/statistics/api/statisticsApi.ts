@@ -18,6 +18,13 @@ export interface ExpiredItem {
   expiry_date: string;
   location: string;
 }
+export interface WastedEvent {
+  event_id: string;
+  food_name: string;
+  icon: string;
+  quantity: number;
+  wasted_date: string;
+}
 export interface PurchaseTrendDay {
   date: string;
   total: number;
@@ -77,6 +84,7 @@ export const statisticsApi = {
       wasteRatio: number;
       wastedCount: number;
       usedCount: number;
+      wastedEvents: WastedEvent[];
     }>(await apiClient.get("/stats/waste-report", params(family_id)));
   },
 };
