@@ -63,7 +63,8 @@ class StatsController {
     try {
       const familyId = getFamilyId(req);
       if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
-      const data = await StatsModel.getPurchaseTrend(familyId);
+      const weekOffset = Number(req.query.weekOffset) || 0;
+      const data = await StatsModel.getPurchaseTrend(familyId, weekOffset);
       return res.status(200).json({ success: true, data, message: 'OK' });
     } catch (err) {
       console.error('[StatsController.purchaseTrend]', err);
@@ -79,6 +80,42 @@ class StatsController {
       return res.status(200).json({ success: true, data, message: 'OK' });
     } catch (err) {
       console.error('[StatsController.wasteReport]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
+  static async consumptionByFood(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const data = await StatsModel.getConsumptionByFood(familyId);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.consumptionByFood]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
+  static async wasteByFood(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const data = await StatsModel.getWasteByFood(familyId);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.wasteByFood]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
+  static async shoppingListStats(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const data = await StatsModel.getShoppingListStats(familyId);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.shoppingListStats]', err);
       return res.status(500).json({ success: false, message: 'Lỗi server' });
     }
   }

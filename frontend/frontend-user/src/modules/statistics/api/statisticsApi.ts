@@ -33,6 +33,23 @@ export interface PurchaseTrendDay {
 export interface PurchaseTrend {
   categories: string[];
   days: PurchaseTrendDay[];
+  from: string;
+  to: string;
+}
+export interface FoodQuantityStat {
+  food_name: string;
+  icon: string;
+  category: string;
+  unit: string;
+  total_quantity: number;
+  event_count?: number;
+}
+export interface ShoppingListStats {
+  total: number;
+  completed: number;
+  active: number;
+  cancelled: number;
+  completionRate: number;
 }
 
 function params(familyId: string) {
@@ -64,9 +81,27 @@ export const statisticsApi = {
     );
   },
 
-  async getPurchaseTrend(family_id: string): Promise<PurchaseTrend> {
+  async getPurchaseTrend(family_id: string, weekOffset = 0): Promise<PurchaseTrend> {
     return unwrapApiData<PurchaseTrend>(
-      await apiClient.get("/stats/purchase-trend", params(family_id))
+      await apiClient.get("/stats/purchase-trend", { params: { familyGroupId: family_id, weekOffset } })
+    );
+  },
+
+  async getConsumptionByFood(family_id: string): Promise<FoodQuantityStat[]> {
+    return unwrapApiData<FoodQuantityStat[]>(
+      await apiClient.get("/stats/consumption-by-food", params(family_id))
+    );
+  },
+
+  async getWasteByFood(family_id: string): Promise<FoodQuantityStat[]> {
+    return unwrapApiData<FoodQuantityStat[]>(
+      await apiClient.get("/stats/waste-by-food", params(family_id))
+    );
+  },
+
+  async getShoppingListStats(family_id: string): Promise<ShoppingListStats> {
+    return unwrapApiData<ShoppingListStats>(
+      await apiClient.get("/stats/shopping-list-stats", params(family_id))
     );
   },
 
