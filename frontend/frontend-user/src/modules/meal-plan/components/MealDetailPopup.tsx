@@ -235,9 +235,11 @@ export function MealDetailPopup() {
                                 <Button size="sm" variant="outline" onClick={() => setViewingRecipe(recipe)}>
                                   <Eye className="mr-1 h-4 w-4" />{t("detailButton")}
                                 </Button>
-                                <Button size="sm" variant="outline" onClick={() => setReplaceTarget({ slot, recipe })}>
-                                  {t("replaceButton")}
-                                </Button>
+                                {!cooked && (
+                                  <Button size="sm" variant="outline" onClick={() => setReplaceTarget({ slot, recipe })}>
+                                    {t("replaceButton")}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -258,9 +260,11 @@ export function MealDetailPopup() {
                                     Đã nấu
                                   </Button>
                                 )}
-                                <Button size="sm" variant="destructive" onClick={() => handleRemove(slot, recipe)} disabled={submitting}>
-                                  <Trash2 className="mr-1 h-4 w-4" />{t("removeButton")}
-                                </Button>
+                                {!cooked && (
+                                  <Button size="sm" variant="destructive" onClick={() => handleRemove(slot, recipe)} disabled={submitting}>
+                                    <Trash2 className="mr-1 h-4 w-4" />{t("removeButton")}
+                                  </Button>
+                                )}
                               </div>
                             </div>
                             {warn && (

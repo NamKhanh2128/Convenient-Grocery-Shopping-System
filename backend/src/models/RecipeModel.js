@@ -11,7 +11,28 @@ function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Converts a quantity to a fixed base unit so amounts recorded in different
+// (but physically compatible) units can be summed/compared correctly \u2014 e.g.
+// a recipe needing "200 g" must correctly match fridge stock recorded as
+// "0.5 kg" instead of failing a naive 0.5 >= 200 comparison. Count-based
+// units (qu\u1ea3, c\u1ee7, mi\u1ebfng, g\u00f3i, h\u1ed9p, b\u00f3) aren't convertible into one another,
+// so they're left as their own unit and only match exactly.
+const UNIT_CONVERSION = {
+  kg: { base: 'g', factor: 1000 },
+  g: { base: 'g', factor: 1 },
+  'l\u00edt': { base: 'ml', factor: 1000 },
+  ml: { base: 'ml', factor: 1 },
+};
+
+function toBaseUnit(quantity, unitName) {
+  const conv = UNIT_CONVERSION[normalizeUnitName(unitName)];
+  if (conv) return { base: conv.base, factor: conv.factor, quantity: quantity * conv.factor };
+  return { base: unitName || '_unspecified', factor: 1, quantity };
 }
 
 function mapRecipe(row, ingredients = []) {
@@ -332,16 +353,26 @@ class RecipeModel {
   // so suggestions/missing-ingredient checks reflect what the family
   // actually has, summing quantities when multiple members hold the same
   // ingredient.
+  // Returns Map<normalizedFoodName, Map<baseUnit, totalQuantity>> — quantities
+  // are pre-converted to a base unit (see toBaseUnit) so e.g. "0.5 kg" and
+  // "300 g" of the same ingredient correctly sum into one comparable total
+  // instead of being two incompatible raw numbers.
   static async getStock(userId, familyGroupId) {
     const userIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
     const { rows } = await query(
-      `SELECT name, quantity FROM fridge_items WHERE user_id = ANY($1::int[]) AND quantity > 0`,
+      `SELECT fi.name, fi.quantity, u.name AS unit_name
+       FROM fridge_items fi
+       LEFT JOIN units u ON u.id = fi.unit_id
+       WHERE fi.user_id = ANY($1::int[]) AND fi.quantity > 0`,
       [userIds]
     );
     const stock = new Map();
     for (const row of rows) {
       const key = normalizeText(row.name);
-      stock.set(key, (stock.get(key) || 0) + Number(row.quantity || 0));
+      const { base, quantity } = toBaseUnit(Number(row.quantity || 0), row.unit_name);
+      if (!stock.has(key)) stock.set(key, new Map());
+      const byUnit = stock.get(key);
+      byUnit.set(base, (byUnit.get(base) || 0) + quantity);
     }
     return stock;
   }
@@ -353,10 +384,16 @@ class RecipeModel {
     const missing = [];
     const available_food_ids = [];
     for (const ing of recipe.nguyen_lieu) {
-      const available = stock.get(normalizeText(ing.ten_nguyen_lieu)) || 0;
-      const need = Number(ing.so_luong) || 1;
-      if (available >= need) available_food_ids.push(ing.thuc_pham_id || `ing-${ing.id}`);
-      else missing.push({ food_id: ing.thuc_pham_id || `ing-${ing.id}`, food_name: ing.ten_nguyen_lieu, quantity: need - available, unit: ing.don_vi || 'g' });
+      const byUnit = stock.get(normalizeText(ing.ten_nguyen_lieu));
+      const { base, factor, quantity: needBase } = toBaseUnit(Number(ing.so_luong) || 1, ing.don_vi);
+      const availableBase = byUnit?.get(base) || 0;
+      if (availableBase >= needBase) available_food_ids.push(ing.thuc_pham_id || `ing-${ing.id}`);
+      else missing.push({
+        food_id: ing.thuc_pham_id || `ing-${ing.id}`,
+        food_name: ing.ten_nguyen_lieu,
+        quantity: Number(((needBase - availableBase) / factor).toFixed(2)),
+        unit: ing.don_vi || 'g',
+      });
     }
     return { recipe, missing, available_food_ids };
   }
@@ -389,34 +426,32 @@ class RecipeModel {
     );
     if (!ingredients.length) return [];
 
-    // Combine by normalized name (case/accent-insensitive) so the same
-    // ingredient typed differently across recipes (e.g. "Cà chua" vs "cà
-    // chua") still merges into a single line instead of splitting quantities.
+    // Combine by normalized name + base unit (case/accent-insensitive, and
+    // unit-compatible — e.g. "Cà chua" needed as "0.3 kg" in one recipe and
+    // "200 g" in another both convert to grams before merging) so repeats
+    // across recipes/occurrences sum into one correct total instead of
+    // mixing incompatible raw numbers.
     const totals = new Map();
     for (const ing of ingredients) {
       const occurrences = occurrencesByRecipe.get(Number(ing.recipe_id)) || 1;
-      const key = normalizeText(ing.name);
-      const needed = (Number(ing.quantity) || 0) * occurrences;
+      const rawUnit = ing.unit_name || ing.unit_symbol || 'g';
+      const normalizedName = normalizeText(ing.name);
+      const { base, quantity: neededBase } = toBaseUnit((Number(ing.quantity) || 0) * occurrences, rawUnit);
+      const key = `${normalizedName}::${base}`;
       const existing = totals.get(key);
       if (existing) {
-        existing.total += needed;
+        existing.total += neededBase;
       } else {
-        totals.set(key, {
-          food_name: ing.name,
-          total: needed,
-          // Name-first, matching every other unit display in the system
-          // ("lít" not its symbol "l").
-          unit: ing.unit_name || ing.unit_symbol || 'g',
-        });
+        totals.set(key, { food_name: ing.name, total: neededBase, unit: base, normalizedName, base });
       }
     }
 
-    // Get fridge stock once
+    // Get fridge stock once (already converted to base units — see getStock)
     const stock = await this.getStock(userId, familyGroupId);
 
     const missing = [];
-    for (const [key, ing] of totals) {
-      const available = stock.get(key) || 0;
+    for (const [, ing] of totals) {
+      const available = stock.get(ing.normalizedName)?.get(ing.base) || 0;
       const needed = ing.total || 1;
       if (available < needed) {
         missing.push({
@@ -487,7 +522,10 @@ class RecipeModel {
     const list = await ShoppingService.createList({
       userId,
       familyId: familyGroupId,
-      listType: 'recipe',
+      // shopping_lists.list_type only allows 'daily'/'weekly' at the DB
+      // level — 'recipe' violated that CHECK constraint and made this
+      // endpoint fail every time it was used.
+      listType: 'daily',
       name: title || `Mua nguyên liệu: ${result.recipe.tieu_de}`,
       items: result.missing.map((row) => ({ food_name: row.food_name, quantity: row.quantity, unit: row.unit })),
     });

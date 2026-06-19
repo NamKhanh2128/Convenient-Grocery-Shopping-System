@@ -50,6 +50,13 @@ class ShoppingModel {
 
   async listItems(listId) {
     const { rows } = await dbQuery(
+      // sli.unit_id/category_id take priority over the catalog food's
+      // defaults — they were resolved to match what THIS item actually
+      // needs (e.g. "g" for a recipe's missing ingredient) when the row was
+      // inserted. The catalog's foods.unit_id is just whatever unit
+      // happened to create that food entry first and can be completely
+      // unrelated (e.g. "kg") — falling back to it here previously made
+      // purchases sync to the fridge under the wrong unit.
       `SELECT sli.id, sli.shopping_list_id, sli.food_id, sli.name, sli.quantity,
               sli.unit_id, sli.category_id, sli.is_purchased, sli.purchased_by, sli.purchased_at,
               sli.bought_quantity, sli.remaining_quantity, sli.item_status,
@@ -59,8 +66,8 @@ class ShoppingModel {
               fc.name_vi AS category_name_vi, fc.name_en AS category_name_en
        FROM shopping_list_items sli
        LEFT JOIN foods f ON sli.food_id = f.id
-       LEFT JOIN units u ON COALESCE(f.unit_id, sli.unit_id) = u.id
-       LEFT JOIN food_categories fc ON COALESCE(f.category_id, sli.category_id) = fc.id
+       LEFT JOIN units u ON COALESCE(sli.unit_id, f.unit_id) = u.id
+       LEFT JOIN food_categories fc ON COALESCE(sli.category_id, f.category_id) = fc.id
        WHERE sli.shopping_list_id = $1
        ORDER BY sli.created_at ASC`,
       [listId]
@@ -80,8 +87,8 @@ class ShoppingModel {
               fc.name_vi AS category_name_vi, fc.name_en AS category_name_en
        FROM shopping_list_items sli
        LEFT JOIN foods f ON sli.food_id = f.id
-       LEFT JOIN units u ON COALESCE(f.unit_id, sli.unit_id) = u.id
-       LEFT JOIN food_categories fc ON COALESCE(f.category_id, sli.category_id) = fc.id
+       LEFT JOIN units u ON COALESCE(sli.unit_id, f.unit_id) = u.id
+       LEFT JOIN food_categories fc ON COALESCE(sli.category_id, f.category_id) = fc.id
        WHERE sli.shopping_list_id = ANY($1::int[])
        ORDER BY sli.shopping_list_id, sli.created_at ASC`,
       [listIds],
@@ -218,7 +225,12 @@ class ShoppingModel {
       : { rows: [] };
     const food = foodRows[0];
     const name = food?.food_name || foodName || 'Mặt hàng mua';
-    const unit = food?.unit_name || unitSymbol || 'g';
+    // unitSymbol is the shopping-list item's OWN unit (what it actually
+    // tracked, e.g. "g" for a recipe's missing ingredient) — prefer it over
+    // the catalog food's default unit, which can be unrelated (e.g. "kg")
+    // and would otherwise sync the purchase into the fridge under the
+    // wrong unit, breaking later missing-ingredient comparisons.
+    const unit = unitSymbol || food?.unit_name || 'g';
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
     // Use local Y/M/D parts so the date isn't rolled back a day in timezones

@@ -369,7 +369,14 @@ class FridgeItemModel {
       : await this.findOrCreateFood({ name: data.name, unit: data.unit, categoryId: data.categoryId });
     const food = await query(`SELECT food_name, unit_id, category_id FROM ${t.food} WHERE id = $1`, [foodId]);
     const row = food.rows[0];
-    const unitId = row?.unit_id || (await this.findUnitId(data.unit));
+    // An explicitly given unit always wins over the catalog food's default —
+    // the catalog's foods.unit_id is just whatever unit happened to create
+    // that entry first (e.g. "kg" from one recipe) and can be unrelated to
+    // what THIS entry is actually denominated in (e.g. "g" from a shopping
+    // purchase). Falling back to the catalog default only when no unit was
+    // given at all previously made fridge entries silently switch units,
+    // breaking later missing-ingredient comparisons.
+    const unitId = data.unit ? await this.findUnitId(data.unit) : row?.unit_id || (await this.findUnitId(data.unit));
     const categoryId = data.categoryId && isNumericId(data.categoryId) ? Number(data.categoryId) : row?.category_id || (await this.findCategoryId());
 
     const result = await query(
