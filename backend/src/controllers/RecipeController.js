@@ -71,6 +71,7 @@ class RecipeController {
       const [recipes, categories] = await Promise.all([
         RecipeModel.findAccessible({
           userId,
+          familyGroupId,
           search: req.query.search || null,
           privacy: req.query.privacy || null,
           timeTag: req.query.timeTag || null,

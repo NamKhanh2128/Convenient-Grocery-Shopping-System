@@ -35,6 +35,20 @@ function toBaseUnit(quantity, unitName) {
   return { base: unitName || '_unspecified', factor: 1, quantity };
 }
 
+// recipes.is_public + recipes.shared_with_family together encode the 3
+// privacy levels exposed to users: SYSTEM (public to everyone), FAMILY
+// (visible to every member of the creator's family), PRIVATE (creator
+// only). There's no separate "privacy" enum column — keep both booleans in
+// sync through this pair of helpers instead of setting is_public directly
+// from loai_quyen (a previous bug used `loai_quyen !== 'PRIVATE'`, which
+// made FAMILY recipes is_public=true — i.e. SYSTEM — since 'FAMILY' !==
+// 'PRIVATE' too).
+function resolveVisibilityFlags(loaiQuyen) {
+  if (loaiQuyen === 'SYSTEM') return { is_public: true, shared_with_family: false };
+  if (loaiQuyen === 'FAMILY') return { is_public: false, shared_with_family: true };
+  return { is_public: false, shared_with_family: false }; // PRIVATE (default)
+}
+
 function mapRecipe(row, ingredients = []) {
   if (!row) return null;
   return {
@@ -48,7 +62,7 @@ function mapRecipe(row, ingredients = []) {
     calories: null,
     do_kho: 'Trung bình',
     hinh_anh_url: row.image_url || '',
-    loai_quyen: row.is_public ? 'SYSTEM' : 'PRIVATE',
+    loai_quyen: row.is_public ? 'SYSTEM' : (row.shared_with_family ? 'FAMILY' : 'PRIVATE'),
     danh_muc: null,
     nguoi_tao_id: row.created_by ? String(row.created_by) : null,
     gia_dinh_id: null,
@@ -147,16 +161,23 @@ class RecipeModel {
     return rows.map((row) => ({ ...row, da_yeu_thich: favSet.has(String(row.id)) }));
   }
 
-  static async listBase({ search = null, limit = 100, offset = 0, publicOnly = false, userId = null, privacy = null, timeTag = null } = {}) {
+  static async listBase({ search = null, limit = 100, offset = 0, publicOnly = false, userId = null, familyGroupId = null, privacy = null, timeTag = null } = {}) {
     const params = [search || null, Math.min(200, Math.max(1, Number(limit) || 100)), Math.max(0, Number(offset) || 0)];
 
-    // Base visibility clause
+    // Base visibility clause — a recipe is visible if it's SYSTEM (public),
+    // mine, or shared with the family by another member of the SAME family
+    // as me (resolved dynamically via group_members, same pattern as the
+    // fridge — not a family id snapshotted on the recipe row).
     let visibilityClause = '';
     if (publicOnly) {
       visibilityClause = 'AND r.is_public = true';
     } else if (userId) {
+      const familyUserIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
       params.push(Number(userId));
-      visibilityClause = `AND (r.is_public = true OR r.created_by = $${params.length})`;
+      const ownIdx = params.length;
+      params.push(familyUserIds);
+      const familyIdx = params.length;
+      visibilityClause = `AND (r.is_public = true OR r.created_by = $${ownIdx} OR (r.shared_with_family = true AND r.created_by = ANY($${familyIdx}::int[])))`;
     }
 
     // Privacy sub-filter
@@ -166,7 +187,11 @@ class RecipeModel {
         privacyClause = 'AND r.is_public = true';
       } else if (privacy === 'PRIVATE' && userId) {
         params.push(Number(userId));
-        privacyClause = `AND r.is_public = false AND r.created_by = $${params.length}`;
+        privacyClause = `AND r.is_public = false AND r.shared_with_family = false AND r.created_by = $${params.length}`;
+      } else if (privacy === 'FAMILY' && userId) {
+        // Base visibilityClause above already restricts this to family-
+        // shared recipes I can actually see (mine or a family member's).
+        privacyClause = 'AND r.is_public = false AND r.shared_with_family = true';
       }
     }
 
@@ -200,22 +225,23 @@ class RecipeModel {
     return rows.map((row) => mapRecipe(row, ingredients.get(String(row.id)) || []));
   }
 
-  static async findAccessible({ userId, search, limit, offset, lite = true, privacy = null, timeTag = null }) {
-    let rows = await this.listBase({ search, limit, offset, userId, privacy, timeTag });
+  static async findAccessible({ userId, familyGroupId = null, search, limit, offset, lite = true, privacy = null, timeTag = null }) {
+    let rows = await this.listBase({ search, limit, offset, userId, familyGroupId, privacy, timeTag });
     rows = await this.markFavorites(rows, userId);
     if (lite) return rows.map((row) => mapRecipe(row, []));
     const ingredients = await this.loadIngredients(rows.map((row) => row.id));
     return rows.map((row) => mapRecipe(row, ingredients.get(String(row.id)) || []));
   }
 
-  static async findById({ id, userId }) {
+  static async findById({ id, userId, familyGroupId = null }) {
+    const familyUserIds = userId ? await FridgeItemModel.getFamilyUserIds(userId, familyGroupId) : [];
     const { rows } = await query(
       `SELECT r.*,
               EXISTS(SELECT 1 FROM favorite_recipes fr WHERE fr.recipe_id = r.id AND fr.user_id = $2) AS da_yeu_thich
        FROM recipes r
-       WHERE r.id = $1 AND (r.is_public = true OR r.created_by = $2)
+       WHERE r.id = $1 AND (r.is_public = true OR r.created_by = $2 OR (r.shared_with_family = true AND r.created_by = ANY($3::int[])))
        LIMIT 1`,
-      [Number(id), userId ? Number(userId) : null]
+      [Number(id), userId ? Number(userId) : null, familyUserIds]
     );
     if (!rows[0]) return null;
     const ingredients = await this.loadIngredients([rows[0].id]);
@@ -276,9 +302,10 @@ class RecipeModel {
 
   static async create({ userId, data }) {
     const totalTime = Number(data.thoi_gian_phut || data.time_minutes || 30);
+    const { is_public, shared_with_family } = resolveVisibilityFlags(data.loai_quyen);
     const { rows } = await query(
-      `INSERT INTO recipes (name_vi, name_en, description, instructions, prep_time, cook_time, servings, created_by, is_public)
-       VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
+      `INSERT INTO recipes (name_vi, name_en, description, instructions, prep_time, cook_time, servings, created_by, is_public, shared_with_family)
+       VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9)
        RETURNING id`,
       [
         String(data.tieu_de || data.recipe_name).trim(),
@@ -288,7 +315,8 @@ class RecipeModel {
         totalTime,
         Number(data.khau_phan || data.servings || 4),
         userId ? Number(userId) : null,
-        data.loai_quyen !== 'PRIVATE',
+        is_public,
+        shared_with_family,
       ]
     );
     await this.replaceIngredients(rows[0].id, data.nguyen_lieu || data.ingredients || []);
@@ -299,6 +327,7 @@ class RecipeModel {
     const existing = await this.findById({ id, userId });
     if (!existing) return null;
     const totalTime = Number(data.thoi_gian_phut || data.time_minutes || existing.thoi_gian_phut || 30);
+    const visibility = data.loai_quyen ? resolveVisibilityFlags(data.loai_quyen) : null;
     await query(
       `UPDATE recipes
        SET name_vi = COALESCE($2, name_vi),
@@ -308,6 +337,7 @@ class RecipeModel {
            prep_time = $6,
            servings = COALESCE($7, servings),
            is_public = COALESCE($8, is_public),
+           shared_with_family = COALESCE($9, shared_with_family),
            updated_at = NOW()
        WHERE id = $1`,
       [
@@ -318,7 +348,8 @@ class RecipeModel {
         Array.isArray(data.instructions) ? data.instructions.join('\n') : data.huong_dan || null,
         totalTime,
         data.khau_phan || data.servings || null,
-        data.loai_quyen ? data.loai_quyen !== 'PRIVATE' : null,
+        visibility ? visibility.is_public : null,
+        visibility ? visibility.shared_with_family : null,
       ]
     );
     if (data.nguyen_lieu || data.ingredients) await this.replaceIngredients(id, data.nguyen_lieu || data.ingredients);
@@ -387,7 +418,7 @@ class RecipeModel {
   }
 
   static async getMissingForRecipe({ recipeId, userId, familyGroupId }) {
-    const recipe = await this.findById({ id: recipeId, userId });
+    const recipe = await this.findById({ id: recipeId, userId, familyGroupId });
     if (!recipe) return null;
     const stock = await this.getStock(userId, familyGroupId);
     const missing = [];
@@ -484,7 +515,7 @@ class RecipeModel {
   }
 
   static async deductIngredientsBestEffort({ recipeId, userId, familyGroupId }) {
-    const recipe = await this.findById({ id: recipeId, userId });
+    const recipe = await this.findById({ id: recipeId, userId, familyGroupId });
     if (!recipe) return;
     const familyUserIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
     for (const ing of recipe.nguyen_lieu) {

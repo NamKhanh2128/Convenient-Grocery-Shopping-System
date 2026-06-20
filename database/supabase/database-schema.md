@@ -241,7 +241,8 @@ Stores recipe information.
 | cook_time | integer | YES | Cooking time in minutes |
 | servings | integer | YES | Number of servings |
 | created_by | integer | YES | Foreign key → users.id (NULL = system recipe) |
-| is_public | boolean | YES | Whether visible to all users |
+| is_public | boolean | YES | Whether visible to all users (privacy level "SYSTEM") |
+| shared_with_family | boolean | NO | Visible to every member of created_by's family, not just the creator (privacy level "FAMILY", default `false`). With is_public, encodes the 3 privacy levels: is_public → SYSTEM; else shared_with_family → FAMILY; else PRIVATE (creator only). Family membership is resolved dynamically via group_members at read time, not snapshotted here. |
 | image_url | character varying | YES | Cover photo URL (Unsplash CDN or other) |
 | created_at | timestamp without time zone | YES | Creation time |
 | updated_at | timestamp without time zone | YES | Last update time |
