@@ -84,6 +84,31 @@ class StatsController {
     }
   }
 
+  static async purchaseTrendByFood(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const weekOffset = Number(req.query.weekOffset) || 0;
+      const data = await StatsModel.getPurchaseTrendByFood(familyId, weekOffset);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.purchaseTrendByFood]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
+  static async fridgeStockByFood(req, res) {
+    try {
+      const familyId = getFamilyId(req);
+      if (!familyId) return res.status(400).json({ success: false, message: 'Thiếu familyGroupId' });
+      const data = await StatsModel.getFridgeStockByFood(familyId);
+      return res.status(200).json({ success: true, data, message: 'OK' });
+    } catch (err) {
+      console.error('[StatsController.fridgeStockByFood]', err);
+      return res.status(500).json({ success: false, message: 'Lỗi server' });
+    }
+  }
+
   static async consumptionByFood(req, res) {
     try {
       const familyId = getFamilyId(req);

@@ -32,12 +32,12 @@ function formatQuantity(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function FoodQuantityList({ items, emptyText, tone }: { items: FoodQuantityStat[]; emptyText: string; tone: "used" | "wasted" }) {
+function FoodQuantityList({ items, emptyText, tone }: { items: FoodQuantityStat[]; emptyText: string; tone: "used" | "wasted" | "neutral" }) {
   if (items.length === 0) {
     return <p className="py-8 text-center text-sm text-[#9188a1]">{emptyText}</p>;
   }
-  const bg = tone === "used" ? "bg-green-50" : "bg-red-50";
-  const badge = tone === "used" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600";
+  const bg = tone === "used" ? "bg-green-50" : tone === "wasted" ? "bg-red-50" : "bg-[#f8f6fb]";
+  const badge = tone === "used" ? "bg-green-100 text-green-700" : tone === "wasted" ? "bg-red-100 text-red-600" : "bg-[#ede7f6] text-[#7655aa]";
   return (
     <div className="space-y-2 max-h-72 overflow-y-auto">
       {items.map((item) => (
@@ -82,6 +82,8 @@ export function StatisticsPage() {
   const [trends, setTrends] = useState<{ mostUsed: FoodTrend[]; leastUsed: FoodTrend[] } | null>(null);
   const [consumptionByFood, setConsumptionByFood] = useState<FoodQuantityStat[]>([]);
   const [wasteByFood, setWasteByFood] = useState<FoodQuantityStat[]>([]);
+  const [purchaseTrendByFood, setPurchaseTrendByFood] = useState<FoodQuantityStat[]>([]);
+  const [fridgeStockByFood, setFridgeStockByFood] = useState<FoodQuantityStat[]>([]);
   const [shoppingListStats, setShoppingListStats] = useState<ShoppingListStats | null>(null);
   const [waste, setWaste] = useState<{
     expiredItems: ExpiredItem[];
@@ -100,20 +102,23 @@ export function StatisticsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [ov, daily, purchases, catBar, tr, ws, cbf, wbf, sls] = await Promise.all([
+        const [ov, daily, purchases, purchasesByFood, catBar, tr, ws, cbf, wbf, sls, fsbf] = await Promise.all([
           statisticsApi.getOverview(family.family_id),
           statisticsApi.getDailyActivity(family.family_id),
           statisticsApi.getPurchaseTrend(family.family_id, 0),
+          statisticsApi.getPurchaseTrendByFood(family.family_id, 0),
           statisticsApi.getCategoryBar(family.family_id),
           statisticsApi.getFoodTrends(family.family_id),
           statisticsApi.getWasteReport(family.family_id),
           statisticsApi.getConsumptionByFood(family.family_id),
           statisticsApi.getWasteByFood(family.family_id),
           statisticsApi.getShoppingListStats(family.family_id),
+          statisticsApi.getFridgeStockByFood(family.family_id),
         ]);
         setOverview(ov);
         setDailyData(daily);
         setPurchaseTrend(purchases);
+        setPurchaseTrendByFood(purchasesByFood);
         setWeekOffset(0);
         setCategoryBar(catBar);
         setTrends(tr);
@@ -121,6 +126,7 @@ export function StatisticsPage() {
         setConsumptionByFood(cbf);
         setWasteByFood(wbf);
         setShoppingListStats(sls);
+        setFridgeStockByFood(fsbf);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Không tải được dữ liệu thống kê");
       } finally {
@@ -142,8 +148,14 @@ export function StatisticsPage() {
     async function loadWeek() {
       setPurchaseTrendLoading(true);
       try {
-        const purchases = await statisticsApi.getPurchaseTrend(family.family_id, weekOffset);
-        if (!cancelled) setPurchaseTrend(purchases);
+        const [purchases, purchasesByFood] = await Promise.all([
+          statisticsApi.getPurchaseTrend(family.family_id, weekOffset),
+          statisticsApi.getPurchaseTrendByFood(family.family_id, weekOffset),
+        ]);
+        if (!cancelled) {
+          setPurchaseTrend(purchases);
+          setPurchaseTrendByFood(purchasesByFood);
+        }
       } catch {
         // keep showing the previous week's data on failure
       } finally {
@@ -280,6 +292,12 @@ export function StatisticsPage() {
               </div>
 
               <div className="rounded-[8px] bg-white p-5 shadow-card">
+                <h3 className="mb-1 font-extrabold text-[#3b2868]">Thực phẩm trong tủ theo từng loại</h3>
+                <p className="mb-3 text-xs text-[#9188a1]">Số lượng hiện có của mỗi thực phẩm, theo đơn vị riêng của nó — chi tiết hơn biểu đồ phân loại ở trên.</p>
+                <FoodQuantityList items={fridgeStockByFood} emptyText="Tủ lạnh đang trống." tone="neutral" />
+              </div>
+
+              <div className="rounded-[8px] bg-white p-5 shadow-card">
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
                   <h3 className="flex items-center gap-2 font-extrabold text-[#3b2868]">
                     <CalendarClock className="h-5 w-5 text-[#7655aa]" />
@@ -331,6 +349,16 @@ export function StatisticsPage() {
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="rounded-[8px] bg-white p-5 shadow-card">
+                <h3 className="mb-1 font-extrabold text-[#3b2868]">Thực phẩm đã mua theo từng loại (tuần này)</h3>
+                <p className="mb-3 text-xs text-[#9188a1]">Số lượng thực tế đã mua cho mỗi thực phẩm trong tuần đang xem ở trên, theo đơn vị riêng của nó.</p>
+                {purchaseTrendLoading ? (
+                  <div className="h-24 animate-pulse rounded-lg bg-[#f8f6fb]" />
+                ) : (
+                  <FoodQuantityList items={purchaseTrendByFood} emptyText="Chưa có dữ liệu mua sắm trong tuần này." tone="neutral" />
                 )}
               </div>
 
@@ -483,7 +511,7 @@ export function StatisticsPage() {
                           <span className="text-xl">{ev.icon}</span>
                           <div className="flex-1">
                             <div className="text-sm font-bold">{ev.food_name}</div>
-                            <div className="text-xs text-[#9188a1]">{ev.quantity} · Vứt ngày {ev.wasted_date}</div>
+                            <div className="text-xs text-[#9188a1]">{formatQuantity(ev.quantity)} {ev.unit} · Vứt ngày {ev.wasted_date}</div>
                           </div>
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">Đã vứt</span>
                         </div>
@@ -537,7 +565,7 @@ export function StatisticsPage() {
                           <div className="flex-1">
                             <div className="text-sm font-bold">{item.food_name}</div>
                             <div className="text-xs text-[#9188a1]">
-                              {item.quantity} · {item.location} · Hết {item.expiry_date}
+                              {formatQuantity(item.quantity)} {item.unit} · {item.location} · Hết {item.expiry_date}
                             </div>
                           </div>
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">Hết hạn</span>

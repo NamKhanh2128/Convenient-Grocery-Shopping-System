@@ -9,6 +9,23 @@ function localMmDd(date) {
   return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// Monday-Sunday week containing today, shifted by weekOffset weeks (0 = this
+// week, -1 = previous week, 1 = next week...). Shared by every "for this
+// week" stat so they all agree on the same date range.
+function getWeekRange(weekOffset = 0) {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun..6=Sat
+  const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek) + Number(weekOffset || 0) * 7;
+  const monday = new Date(now);
+  monday.setDate(monday.getDate() + diffToMonday);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  return { days, from: localYmd(days[0]), to: localYmd(days[6]) };
+}
+
 class StatsModel {
   static async getFamilyUserIds(familyId) {
     const { rows } = await query(
@@ -131,18 +148,7 @@ class StatsModel {
     const categoriesRes = await query(`SELECT name_vi FROM food_categories ORDER BY id`);
     const categories = categoriesRes.rows.map((r) => r.name_vi);
 
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun..6=Sat
-    const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek) + Number(weekOffset || 0) * 7;
-    const monday = new Date(now);
-    monday.setDate(monday.getDate() + diffToMonday);
-    const weekDays = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-    const fromDate = localYmd(weekDays[0]);
-    const toDate = localYmd(weekDays[6]);
+    const { days: weekDays, from: fromDate, to: toDate } = getWeekRange(weekOffset);
 
     const { rows } = await query(`
       SELECT TO_CHAR(sli.purchased_at, 'MM-DD') AS date,
@@ -175,6 +181,61 @@ class StatsModel {
       result.push(entry);
     }
     return { categories, days: result, from: fromDate, to: toDate };
+  }
+
+  // "Thực phẩm đã mua" for the same week as getPurchaseTrend, broken down by
+  // individual food (not category) — how much of each specific food was
+  // actually bought (sli.bought_quantity), in its own unit.
+  static async getPurchaseTrendByFood(familyId, weekOffset = 0) {
+    const { from: fromDate, to: toDate } = getWeekRange(weekOffset);
+
+    const { rows } = await query(`
+      SELECT COALESCE(f.food_name, sli.name) AS food_name,
+             COALESCE(f.icon, '🧺') AS icon,
+             COALESCE(fc.name_vi, 'Khác') AS category,
+             COALESCE(u.name, 'miếng') AS unit,
+             SUM(sli.bought_quantity)::float AS total_quantity,
+             COUNT(*)::int AS event_count
+      FROM shopping_list_items sli
+      JOIN shopping_lists sl ON sl.id = sli.shopping_list_id
+      LEFT JOIN foods f ON f.id = sli.food_id
+      LEFT JOIN food_categories fc ON fc.id = COALESCE(f.category_id, sli.category_id)
+      LEFT JOIN units u ON u.id = COALESCE(sli.unit_id, f.unit_id)
+      WHERE sl.group_id = $1
+        AND sli.purchased_at IS NOT NULL
+        AND sli.purchased_at::date BETWEEN $2 AND $3
+      GROUP BY COALESCE(f.food_name, sli.name), f.icon, fc.name_vi, u.name
+      ORDER BY total_quantity DESC
+      LIMIT 15
+    `, [Number(familyId), fromDate, toDate]);
+
+    return rows.map((r) => ({ ...r, total_quantity: Number(r.total_quantity) }));
+  }
+
+  // "Thực phẩm trong tủ theo từng loại" — current fridge stock broken down
+  // by individual food (not category), with the actual quantity + its own
+  // unit, complementing the category-level "Phân loại thực phẩm" pie chart.
+  static async getFridgeStockByFood(familyId) {
+    const userIds = await this.getFamilyUserIds(familyId);
+    if (userIds.length === 0) return [];
+
+    const { rows } = await query(`
+      SELECT fi.name AS food_name,
+             COALESCE(f.icon, '🍽️') AS icon,
+             COALESCE(fc.name_vi, 'Khác') AS category,
+             COALESCE(u.name, 'miếng') AS unit,
+             SUM(fi.quantity)::float AS total_quantity
+      FROM fridge_items fi
+      LEFT JOIN foods f ON LOWER(f.food_name) = LOWER(fi.name)
+      LEFT JOIN food_categories fc ON fc.id = fi.category_id
+      LEFT JOIN units u ON u.id = fi.unit_id
+      WHERE fi.user_id = ANY($1)
+      GROUP BY fi.name, f.icon, fc.name_vi, u.name
+      ORDER BY total_quantity DESC
+      LIMIT 15
+    `, [userIds]);
+
+    return rows.map((r) => ({ ...r, total_quantity: Number(r.total_quantity) }));
   }
 
   // "Tiêu thụ theo thực phẩm" — actual quantity consumed per food (e.g.
@@ -358,10 +419,12 @@ class StatsModel {
                fi.name AS food_name,
                COALESCE(f.icon, '🍽️') AS icon,
                fi.quantity::float AS quantity,
+               COALESCE(u.name, 'miếng') AS unit,
                TO_CHAR(fi.expiration_date, 'YYYY-MM-DD') AS expiry_date,
                fi.storage_location AS location
         FROM fridge_items fi
         LEFT JOIN foods f ON LOWER(f.food_name) = LOWER(fi.name)
+        LEFT JOIN units u ON u.id = fi.unit_id
         WHERE fi.user_id = ANY($1) AND fi.expiration_date < $2
         ORDER BY fi.expiration_date ASC
       `, [userIds, today]),
@@ -373,9 +436,11 @@ class StatsModel {
           COALESCE(f.food_name, 'Thực phẩm khác') AS food_name,
           COALESCE(f.icon, '🍽️') AS icon,
           fue.quantity::float AS quantity,
+          COALESCE(u.name, 'miếng') AS unit,
           TO_CHAR(fue.created_at, 'YYYY-MM-DD') AS wasted_date
         FROM food_usage_events fue
         LEFT JOIN foods f ON f.id = fue.food_id
+        LEFT JOIN units u ON u.id = fue.unit_id
         WHERE fue.user_id = ANY($1) AND fue.event_type = 'wasted'
           AND fue.created_at >= NOW() - INTERVAL '30 days'
         ORDER BY fue.created_at DESC

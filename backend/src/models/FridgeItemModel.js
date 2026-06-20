@@ -100,6 +100,7 @@ function mapRow(row, familyKey = null) {
     // Name-first ("lít" not its DB symbol "l") — matches the canonical unit
     // names used by every dropdown/type across the system.
     unit: row.unit_name || row.unit_symbol || '',
+    unitId: row.unit_id != null ? Number(row.unit_id) : null,
     expiryDate: formatDate(row.expiry_date),
     category: row.category_id ? { id: String(row.category_id), name: row.category_name || null } : null,
     storageLocation: toVnStorage(row.storage_location),
@@ -124,6 +125,7 @@ const BASE_SELECT = `
   NULL::int AS food_id,
   fi.${c.itemName} AS food_name,
   fi.${c.quantity} AS quantity,
+  fi.${c.unitId} AS unit_id,
   u.${c.unitName} AS unit_name,
   u.${c.unitSymbol} AS unit_symbol,
   fi.${c.expiry} AS expiry_date,
@@ -447,6 +449,7 @@ class FridgeItemModel {
         fridgeItemId: Number(id),
         eventType: 'wasted',
         quantity: existing.quantity,
+        unitId: existing.unitId,
       }, client);
       const result = await client.query(`DELETE FROM ${t.item} WHERE id = $1`, [Number(id)]);
       return result.rowCount > 0;
@@ -460,7 +463,7 @@ class FridgeItemModel {
 
     return this.withTransaction(async (client) => {
       const { rows } = await client.query(
-        `SELECT id, name, quantity, user_id FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
+        `SELECT id, name, quantity, unit_id, user_id FROM ${t.item} WHERE id = ANY($1::int[]) AND user_id = ANY($2::int[])`,
         [numericIds, userIds]
       );
       for (const row of rows) {
@@ -471,6 +474,7 @@ class FridgeItemModel {
           fridgeItemId: row.id,
           eventType: 'wasted',
           quantity: row.quantity,
+          unitId: row.unit_id,
         }, client);
       }
 
@@ -515,6 +519,7 @@ class FridgeItemModel {
         fridgeItemId: Number(id),
         eventType: 'used',
         quantity: usedAmount,
+        unitId: existing.unitId,
       }, client);
     });
 

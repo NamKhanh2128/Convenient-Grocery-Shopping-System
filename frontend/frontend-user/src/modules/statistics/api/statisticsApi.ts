@@ -15,6 +15,7 @@ export interface ExpiredItem {
   food_name: string;
   icon: string;
   quantity: number;
+  unit: string;
   expiry_date: string;
   location: string;
 }
@@ -23,6 +24,7 @@ export interface WastedEvent {
   food_name: string;
   icon: string;
   quantity: number;
+  unit: string;
   wasted_date: string;
 }
 export interface PurchaseTrendDay {
@@ -84,6 +86,18 @@ export const statisticsApi = {
   async getPurchaseTrend(family_id: string, weekOffset = 0): Promise<PurchaseTrend> {
     return unwrapApiData<PurchaseTrend>(
       await apiClient.get("/stats/purchase-trend", { params: { familyGroupId: family_id, weekOffset } })
+    );
+  },
+
+  async getPurchaseTrendByFood(family_id: string, weekOffset = 0): Promise<FoodQuantityStat[]> {
+    return unwrapApiData<FoodQuantityStat[]>(
+      await apiClient.get("/stats/purchase-trend-by-food", { params: { familyGroupId: family_id, weekOffset } })
+    );
+  },
+
+  async getFridgeStockByFood(family_id: string): Promise<FoodQuantityStat[]> {
+    return unwrapApiData<FoodQuantityStat[]>(
+      await apiClient.get("/stats/fridge-stock-by-food", params(family_id))
     );
   },
 

@@ -9,6 +9,7 @@ import { RecipePicker } from "./RecipePicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useT } from "@/shared/store/languageStore";
+import { todayIso } from "@/shared/utils/date";
 
 const SLOTS: MealSlot[] = ["Sáng", "Trưa", "Tối"];
 
@@ -146,6 +147,10 @@ export function MealDetailPopup() {
     : pickerSlot || replaceTarget
       ? t("chooseRecipe")
       : t("mealDetail");
+
+  // Can't shop for a day that's already passed — only show the
+  // missing-ingredients shortcut for today or future dates.
+  const isPastDate = Boolean(editingDate) && editingDate! < todayIso();
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -291,10 +296,12 @@ export function MealDetailPopup() {
                   </section>
                 );
               })}
-              <Button variant="outline" onClick={handleCreateShopping} disabled={submitting} className="gap-1.5">
-                <ShoppingCart className="h-4 w-4" />
-                {t("addMissingToCart")}
-              </Button>
+              {!isPastDate && (
+                <Button variant="outline" onClick={handleCreateShopping} disabled={submitting} className="gap-1.5">
+                  <ShoppingCart className="h-4 w-4" />
+                  {t("addMissingToCart")}
+                </Button>
+              )}
             </div>
           )}
         </div>
