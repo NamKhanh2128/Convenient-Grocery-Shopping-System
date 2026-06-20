@@ -10,7 +10,7 @@ import { AppModal } from "@/shared/components/AppModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { foodCategories, foodLocations } from "@/shared/constants/options";
+import { foodLocations } from "@/shared/constants/options";
 import { daysUntil, formatDate } from "@/shared/utils/date";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -56,6 +56,13 @@ export function FridgePage() {
   }
 
   const expiring = items.filter((item) => daysUntil(item.expiry_date) <= 3);
+  // Categories are admin-managed and open-ended (new ones can be added
+  // anytime), so derive the filter options from what's actually in the
+  // fridge instead of a fixed list that would miss new categories.
+  const availableCategories = useMemo(
+    () => Array.from(new Set(items.map((item) => item.food.category))).sort((a, b) => a.localeCompare(b, "vi")),
+    [items],
+  );
   const filtered = useMemo(() => items.filter((item) => {
     const matchesName = item.food.food_name.toLowerCase().includes(query.toLowerCase());
     const matchesCategory = category === "all" || item.food.category === category;
@@ -322,7 +329,7 @@ export function FridgePage() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả danh mục</SelectItem>
-              {foodCategories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+              {availableCategories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={expiry} onValueChange={setExpiry}>

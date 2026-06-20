@@ -231,7 +231,16 @@ class RecipeModel {
 
   // See FridgeItemModel.findUnitId — resolves to a canonical unit name
   // instead of creating a new row for whatever string was sent in.
+  // Units are admin-extensible — check for an exact existing match before
+  // coercing through normalizeUnitName(), which would otherwise silently
+  // replace a real custom unit (e.g. an admin-created "test" unit) with the
+  // "miếng" fallback just because it isn't one of the 10 canonical names.
   static async findUnitId(unit) {
+    const raw = String(unit || '').trim();
+    if (raw) {
+      const exact = await query(`SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1`, [raw]);
+      if (exact.rows[0]) return exact.rows[0].id;
+    }
     const canonicalName = normalizeUnitName(unit);
     const found = await query(`SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1`, [canonicalName]);
     if (found.rows[0]) return found.rows[0].id;

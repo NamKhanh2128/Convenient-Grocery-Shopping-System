@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { Unit, FoodCategory } from "@/types";
 import { adminRecipeApi, type IngredientInput, type RecipePayload } from "@/api/adminRecipeApi";
+import { adminFoodApi, type FoodWithMeta } from "@/api/adminFoodApi";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
   const [saving, setSaving] = useState(false);
   const [units, setUnits] = useState<Unit[]>([]);
   const [categories, setCategories] = useState<FoodCategory[]>([]);
+  const [foods, setFoods] = useState<FoodWithMeta[]>([]);
 
   // Form Fields
   const [nameVi, setNameVi] = useState("");
@@ -73,12 +75,14 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
     async function loadData() {
       setLoading(true);
       try {
-        const [unitsData, categoriesData] = await Promise.all([
+        const [unitsData, categoriesData, foodsData] = await Promise.all([
           adminRecipeApi.getUnits(),
           adminRecipeApi.getCategories(),
+          adminFoodApi.list(),
         ]);
         setUnits(unitsData);
         setCategories(categoriesData);
+        setFoods(foodsData);
 
         if (mode === "edit" && id) {
           const recipe = await adminRecipeApi.getById(Number(id));
@@ -145,6 +149,10 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
       toast.error("Hệ thống chưa có đơn vị tính nào để lựa chọn.");
       return;
     }
+    if (foods.length === 0) {
+      toast.error("Hệ thống chưa có thực phẩm nào — hãy thêm thực phẩm ở mục Quản lý thực phẩm trước.");
+      return;
+    }
     setIngredients([...ingredients, { name: "", quantity: 1, unit_id: units[0]?.id ?? null, category_id: null }]);
   };
 
@@ -165,6 +173,23 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
       item.name = val;
     }
     next[idx] = item;
+    setIngredients(next);
+  };
+
+  // Selecting a food from the catalog fills its name plus the catalog's own
+  // unit/category as sensible defaults (still overridable below) — keeps
+  // ingredient names exactly matching a real food instead of free-typed
+  // text that can drift from the catalog (typos, wording differences) and
+  // silently break "thiếu nguyên liệu" matching elsewhere in the system.
+  const handleIngredientFoodSelect = (idx: number, foodName: string) => {
+    const food = foods.find((f) => f.food_name === foodName);
+    const next = [...ingredients];
+    next[idx] = {
+      ...next[idx]!,
+      name: foodName,
+      unit_id: food?.unit_id ?? next[idx]!.unit_id,
+      category_id: food?.category_id ?? next[idx]!.category_id,
+    };
     setIngredients(next);
   };
 
@@ -190,7 +215,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
 
     for (const ing of ingredients) {
       if (!ing.name.trim()) {
-        toast.error("Vui lòng nhập tên cho tất cả nguyên liệu.");
+        toast.error("Vui lòng chọn nguyên liệu trong hệ thống cho tất cả dòng.");
         return;
       }
       if (!ing.unit_id) {
@@ -494,13 +519,22 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
                   {ingredients.map((ing, idx) => (
                     <div key={idx} className="space-y-2 border border-border/40 rounded-xl p-3">
                       <div className="flex items-center gap-2">
-                        {/* Ingredient name */}
-                        <Input
-                          placeholder="Tên nguyên liệu (vd: Thịt bò)..."
-                          value={ing.name}
-                          onChange={(e) => handleIngredientChange(idx, "name", e.target.value)}
-                          className="flex-1 h-9 rounded-[8px] text-xs font-semibold"
-                        />
+                        {/* Ingredient — must be picked from the foods catalog, not free-typed */}
+                        <Select
+                          value={ing.name || undefined}
+                          onValueChange={(val) => handleIngredientFoodSelect(idx, val)}
+                        >
+                          <SelectTrigger className="flex-1 h-9 rounded-[8px] text-xs font-semibold">
+                            <SelectValue placeholder="Chọn nguyên liệu trong hệ thống..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {foods.map((food) => (
+                              <SelectItem key={food.id} value={food.food_name} className="text-xs">
+                                {food.icon} {food.food_name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         {/* Remove button */}
                         <Button
                           type="button"

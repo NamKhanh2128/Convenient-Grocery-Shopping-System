@@ -170,11 +170,21 @@ class FridgeItemModel {
     return ids.length ? ids : [Number(userId)].filter(Boolean);
   }
 
-  // Resolves to one of the canonical unit rows (see config/unitsConfig.js).
-  // Never creates a new row here — an unrecognized unit string falls back to
-  // "miếng" instead of polluting the units table with one-off junk rows
+  // Resolves a unit string to a real unit row. Units are admin-extensible
+  // (the admin "Đơn vị tính" page can create any custom unit, e.g. a test
+  // unit named "test"), so an input that doesn't match one of the 10
+  // canonical names can still be a real, existing unit — check for an exact
+  // match first instead of coercing it through normalizeUnitName() right
+  // away, which would silently lose it to the "miếng" fallback. Only when
+  // nothing matches at all (typo/garbage input) do we fall back to the
+  // canonical name instead of polluting the units table with a junk row
   // (this is exactly how a stray "pcs" unit got created previously).
   static async findUnitId(unit) {
+    const raw = String(unit || '').trim();
+    if (raw) {
+      const exact = await query(`SELECT id FROM ${t.unit} WHERE lower(name) = lower($1) LIMIT 1`, [raw]);
+      if (exact.rows[0]) return exact.rows[0].id;
+    }
     const canonicalName = normalizeUnitName(unit);
     const found = await query(
       `SELECT id FROM ${t.unit} WHERE lower(name) = lower($1) LIMIT 1`,

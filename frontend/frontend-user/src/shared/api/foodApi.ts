@@ -6,9 +6,12 @@ import { normalizeFoodUnit } from "@/shared/utils/units";
 
 const useFoodBackend = import.meta.env.VITE_USE_FOOD_API !== "false";
 
+// Categories are admin-managed (food_categories table) and open-ended — new
+// ones can be created anytime, so this must NOT coerce an unrecognized-but-
+// real category down to "Khác". Only fall back when the value is missing.
 function toFoodCategory(value?: string): FoodCategory {
-  const allowed: FoodCategory[] = ["Rau củ", "Thịt cá", "Đồ khô", "Sữa & Trứng", "Gia vị", "Khác"];
-  return allowed.includes(value as FoodCategory) ? (value as FoodCategory) : "Khác";
+  const trimmed = value?.trim();
+  return (trimmed || "Khác") as FoodCategory;
 }
 
 type BackendFood = {

@@ -26,6 +26,8 @@ Stores user account information.
 | google_id | character varying | YES | Google account id (UNIQUE) for OAuth login |
 | avatar_url | character varying | YES | Profile picture URL (from Google or profile update) |
 | auth_provider | character varying | NO | Auth source — `local` or `google` (default `local`) |
+| is_deleted | boolean | NO | Soft-delete flag (default `false`). Admin "delete" sets this instead of removing the row — `family_groups.created_by` has no `ON DELETE CASCADE`/`SET NULL`, and a hard delete would also cascade-wipe the user's fridge/meal-plan/shopping history via other FKs. Deleted users are excluded from admin listing and can no longer log in. |
+| deleted_at | timestamp with time zone | YES | When the account was soft-deleted (NULL if active) |
 | created_at | timestamp without time zone | YES | Account creation time |
 | updated_at | timestamp without time zone | YES | Last update time |
 

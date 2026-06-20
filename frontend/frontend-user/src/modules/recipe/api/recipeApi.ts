@@ -110,15 +110,12 @@ function extractApiError(error: unknown): string {
 
 const toFoodUnit = normalizeFoodUnit;
 
+// Categories are admin-managed and open-ended — new ones can be created
+// anytime, so this must NOT coerce an unrecognized-but-real category down
+// to "Khác". Only fall back when the value is missing.
 function toFoodCategory(name: string | null | undefined): FoodCategory {
-  const map: Record<string, FoodCategory> = {
-    "Rau củ": "Rau củ",
-    "Thịt cá": "Thịt cá",
-    "Đồ khô": "Đồ khô",
-    "Sữa & Trứng": "Sữa & Trứng",
-    "Gia vị": "Gia vị",
-  };
-  return map[name || ""] || "Khác";
+  const trimmed = name?.trim();
+  return (trimmed || "Khác") as FoodCategory;
 }
 
 function toRecipeDetail(recipe: BackendRecipe | null | undefined): RecipeDetail {

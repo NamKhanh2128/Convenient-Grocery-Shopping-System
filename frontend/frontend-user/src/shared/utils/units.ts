@@ -36,10 +36,15 @@ const UNIT_SYNONYMS: Record<string, FoodUnit> = {
 
 export const FALLBACK_UNIT: FoodUnit = "miếng";
 
-/** Resolves any raw unit string to one of the system's canonical FoodUnit values. */
+// Units are admin-extensible (the admin "Đơn vị tính" page can create any
+// custom unit, e.g. "test"), so a value that isn't one of the 10 canonical
+// names can still be a real unit — pass it through instead of coercing it
+// to the fallback. Only an empty value (no unit info at all) falls back.
 export function normalizeFoodUnit(value?: string | null): FoodUnit {
-  const text = String(value ?? "").trim().toLowerCase();
+  const text = String(value ?? "").trim();
   if (!text) return FALLBACK_UNIT;
-  if (foodUnits.includes(text as FoodUnit)) return text as FoodUnit;
-  return UNIT_SYNONYMS[text] ?? FALLBACK_UNIT;
+  const lower = text.toLowerCase();
+  if (foodUnits.includes(lower as FoodUnit)) return lower as FoodUnit;
+  if (UNIT_SYNONYMS[lower]) return UNIT_SYNONYMS[lower];
+  return text as FoodUnit;
 }

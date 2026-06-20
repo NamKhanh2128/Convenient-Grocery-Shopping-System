@@ -89,7 +89,7 @@ async function findUserByEmail(email) {
       is_locked,
       failed_login_attempts
      FROM ${u.table}
-     WHERE lower(${u.email}) = lower($1)
+     WHERE lower(${u.email}) = lower($1) AND is_deleted = false
      LIMIT 1`,
     [email]
   );
@@ -138,7 +138,7 @@ async function findUserById(userId) {
       phone,
       avatar_url
      FROM ${u.table}
-     WHERE ${u.id}::text = $1
+     WHERE ${u.id}::text = $1 AND is_deleted = false
      LIMIT 1`,
     [String(userId)]
   );
@@ -150,7 +150,7 @@ async function findUserByIdWithPassword(userId) {
   const { rows } = await pool.query(
     `SELECT ${u.id} AS user_id, ${u.password} AS password
      FROM ${u.table}
-     WHERE ${u.id}::text = $1
+     WHERE ${u.id}::text = $1 AND is_deleted = false
      LIMIT 1`,
     [String(userId)]
   );

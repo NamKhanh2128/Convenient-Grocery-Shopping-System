@@ -24,6 +24,9 @@ class AdminUserModel {
       params.push(locked === 'true' || locked === true);
       conditions.push(`u.is_locked = $${params.length}`);
     }
+    // Soft-deleted accounts are kept in the table (FK history, audit) but
+    // hidden from the normal admin listing.
+    conditions.push(`u.is_deleted = false`);
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -152,25 +155,32 @@ class AdminUserModel {
   }
 
   /**
-   * Delete a single user (cascades via FK).
+   * Soft-delete a single user: marks the account deleted instead of removing
+   * the row. A hard DELETE would violate family_groups_created_by_fkey (no
+   * cascade there) and, for users where it doesn't, would silently cascade-
+   * wipe their fridge/meal-plan/shopping history via the FKs that DO cascade
+   * — neither of which is acceptable, since account records must be kept.
    */
   static async delete(id, requestingAdminId) {
     if (String(id) === String(requestingAdminId)) {
       throw new Error('Không thể tự xóa tài khoản quản trị đang đăng nhập.');
     }
-    const { rowCount } = await query('DELETE FROM users WHERE id = $1', [id]);
+    const { rowCount } = await query(
+      `UPDATE users SET is_deleted = true, deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
     if (rowCount === 0) throw new Error('Không tìm thấy người dùng.');
   }
 
   /**
-   * Bulk delete users (cascades via FK).
+   * Bulk soft-delete users — see delete() for why this isn't a hard DELETE.
    */
   static async bulkDelete(ids, requestingAdminId) {
     if (ids.includes(String(requestingAdminId))) {
       throw new Error('Danh sách xóa chứa tài khoản quản trị đang đăng nhập.');
     }
     await query(
-      `DELETE FROM users WHERE id = ANY($1::int[])`,
+      `UPDATE users SET is_deleted = true, deleted_at = NOW(), updated_at = NOW() WHERE id = ANY($1::int[])`,
       [ids]
     );
   }

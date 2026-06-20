@@ -3,20 +3,13 @@ const fridgeSchema = require('../config/fridgeSchema');
 
 const { tables: t, columns: c } = fridgeSchema;
 
-const CATEGORY_MAP = {
-  'Rau củ': 'Rau củ',
-  'Thịt cá': 'Thịt cá',
-  'Đồ khô': 'Đồ khô',
-  'Sữa & Trứng': 'Sữa & Trứng',
-  'Gia vị': 'Gia vị',
-};
-
+// Categories are admin-managed (food_categories table) and open-ended — any
+// real category name must pass through as-is. Only fall back to "Khác" when
+// a food has no category at all (NULL). Previously this re-mapped every
+// category through a hardcoded substring-match list, so any admin-created
+// category not in that list (e.g. "Đậu & hạt") silently became "Khác".
 function mapCategory(name) {
-  if (!name) return 'Khác';
-  for (const [key, value] of Object.entries(CATEGORY_MAP)) {
-    if (name.toLowerCase().includes(key.toLowerCase())) return value;
-  }
-  return 'Khác';
+  return name || 'Khác';
 }
 
 class FoodModel {

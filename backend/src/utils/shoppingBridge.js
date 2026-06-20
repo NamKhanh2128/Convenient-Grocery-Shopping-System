@@ -48,13 +48,28 @@ async function resolveShoppingGroupId(familyGroupId) {
   return groupId;
 }
 
-// Resolves to a canonical unit id (see config/unitsConfig.js). Previously
-// this ran the input through a hand-rolled UNIT_SYMBOLS map that translated
-// "quả"/"củ"/"miếng" all to the English symbol "pcs" and "gói" to "pack" —
-// neither of which exists in the real `units` table (symbol == name for
-// these), so the lookup always missed and silently inserted a junk "pcs"
-// unit row. normalizeUnitName resolves straight to a real canonical name.
+// Resolves to a unit id. Previously this ran the input through a hand-rolled
+// UNIT_SYMBOLS map that translated "quả"/"củ"/"miếng" all to the English
+// symbol "pcs" and "gói" to "pack" — neither of which exists in the real
+// `units` table, so the lookup always missed and silently inserted a junk
+// "pcs" unit row.
+//
+// Units are also admin-extensible (the admin "Đơn vị tính" page can create
+// any custom unit), so an input that isn't one of the 10 canonical names
+// can still be a real, existing unit — check for an exact match first
+// before falling back to normalizeUnitName()'s canonical coercion, which
+// would otherwise silently replace a real custom unit with "miếng".
 async function getDefaultUnitId(unitInput) {
+  const raw = String(unitInput || '').trim().toLowerCase();
+  if (raw) {
+    if (defaultUnitIdCache.has(raw)) return defaultUnitIdCache.get(raw);
+    const exact = await query('SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1', [raw]);
+    if (exact.rows[0]) {
+      defaultUnitIdCache.set(raw, exact.rows[0].id);
+      return exact.rows[0].id;
+    }
+  }
+
   const canonicalName = normalizeUnitName(unitInput);
   if (defaultUnitIdCache.has(canonicalName)) return defaultUnitIdCache.get(canonicalName);
   const found = await query('SELECT id FROM units WHERE lower(name) = lower($1) LIMIT 1', [canonicalName]);
