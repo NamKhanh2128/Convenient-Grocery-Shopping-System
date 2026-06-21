@@ -1,5 +1,5 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, Download, Edit, Filter, MapPin, Package, Plus, Search, SortAsc, Trash2, Utensils, X } from "lucide-react";
+import { Calendar, Edit, Filter, MapPin, Package, Plus, Search, SortAsc, Trash2, Utensils, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -129,17 +129,6 @@ export function FridgePage() {
     }
   }
 
-  function exportCsv() {
-    const content = filtered.map((item) => `${item.food.food_name},${item.quantity},${item.food.unit},${item.expiry_date},${item.food.category},${item.location}`).join("\n");
-    const blob = new Blob([`name,quantity,unit,expiry,category,location\n${content}`], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "fridge-items.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   const deleteButtonLabel = !deleteMode
     ? "Xóa"
     : selectedIds.length > 0
@@ -198,7 +187,6 @@ export function FridgePage() {
           </div>
           <Button variant="outline" onClick={() => setFilterOpen(true)}><Filter className="mr-2 h-4 w-4" />Lọc</Button>
           <Button variant="outline" onClick={() => setSortAsc((value) => !value)}><SortAsc className="mr-2 h-4 w-4" />Sắp xếp</Button>
-          <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" />Xuất CSV</Button>
         </div>
 
         {/* Delete mode: select-all banner */}
