@@ -1,0 +1,16 @@
+@startuml
+title Kiến trúc Client-Server 3 lớp (3-Tier / Layered Architecture)
+
+[Frontend\n(frontend-user + frontend-admin)] as FE
+note right of FE : Tier 1: Presentation\n2 SPA (React + TS + Vite)
+
+[Backend API\n(Express.js)\nRoutes → Controllers → (Services) → Models] as BACKEND
+note right of BACKEND : Tier 2: Application / Logic
+
+database "PostgreSQL\n(Supabase)" as DB
+note right of DB : Tier 3: Data
+
+FE --> BACKEND : REST API (JSON, JWT, HTTPS)
+BACKEND --> DB : SQL có tham số hoá (pg, không ORM)
+
+@enduml

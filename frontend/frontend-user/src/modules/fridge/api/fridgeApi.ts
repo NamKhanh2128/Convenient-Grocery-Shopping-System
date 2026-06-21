@@ -169,10 +169,7 @@ export const fridgeApi = {
     };
   },
 
-  // "Dùng nhanh" (quick consume): deducts quantityUsed from the item. The
-  // backend logs a 'used' event for statistics, and if it fully empties the
-  // item, deletes it instead of leaving a 0-quantity row — so the caller must
-  // check `deleted` rather than assume the item still exists afterward.
+  // Backend deletes the item instead of leaving a 0-quantity row when fully used.
   async consume(fridge_item_id: string, quantityUsed: number): Promise<{ deleted: boolean }> {
     if (!Number.isFinite(quantityUsed) || quantityUsed <= 0) {
       throw new Error("Số lượng dùng phải lớn hơn 0.");

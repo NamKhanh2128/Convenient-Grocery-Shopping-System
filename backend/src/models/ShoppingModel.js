@@ -50,13 +50,8 @@ class ShoppingModel {
 
   async listItems(listId) {
     const { rows } = await dbQuery(
-      // sli.unit_id/category_id take priority over the catalog food's
-      // defaults — they were resolved to match what THIS item actually
-      // needs (e.g. "g" for a recipe's missing ingredient) when the row was
-      // inserted. The catalog's foods.unit_id is just whatever unit
-      // happened to create that food entry first and can be completely
-      // unrelated (e.g. "kg") — falling back to it here previously made
-      // purchases sync to the fridge under the wrong unit.
+      // sli.unit_id/category_id take priority over the catalog food's defaults,
+      // which can be unrelated (e.g. "kg") to what this item actually needs.
       `SELECT sli.id, sli.shopping_list_id, sli.food_id, sli.name, sli.quantity,
               sli.unit_id, sli.category_id, sli.is_purchased, sli.purchased_by, sli.purchased_at,
               sli.bought_quantity, sli.remaining_quantity, sli.item_status,
@@ -121,11 +116,8 @@ class ShoppingModel {
   }
 
   async updateItemPurchased(itemId, boughtQuantity, remainingQuantity, itemStatus, isPurchased, inventorySyncedQuantity, purchasedBy = null) {
-    // $8 (purchasedBy) is only ever read inside the CASE's THEN branch, so
-    // Postgres can't infer its type from the `purchased_by` column (an
-    // untyped/ambiguous parameter inside CASE...ELSE NULL defaults to text),
-    // causing "column purchased_by is of type integer but expression is of
-    // type text". Cast explicitly so it always binds as integer.
+    // $8 needs an explicit ::integer cast — inside CASE...ELSE NULL, Postgres
+    // can't infer its type and defaults to text, causing a type mismatch error.
     await dbQuery(
       `UPDATE shopping_list_items
        SET bought_quantity = $1, remaining_quantity = $2, item_status = $3, is_purchased = $4,
@@ -225,16 +217,11 @@ class ShoppingModel {
       : { rows: [] };
     const food = foodRows[0];
     const name = food?.food_name || foodName || 'Mặt hàng mua';
-    // unitSymbol is the shopping-list item's OWN unit (what it actually
-    // tracked, e.g. "g" for a recipe's missing ingredient) — prefer it over
-    // the catalog food's default unit, which can be unrelated (e.g. "kg")
-    // and would otherwise sync the purchase into the fridge under the
-    // wrong unit, breaking later missing-ingredient comparisons.
+    // Prefer the item's own unit over the catalog food's default, which can be unrelated (e.g. "kg").
     const unit = unitSymbol || food?.unit_name || 'g';
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
-    // Use local Y/M/D parts so the date isn't rolled back a day in timezones
-    // ahead of UTC (toISOString converts to UTC).
+    // Local Y/M/D parts — toISOString shifts to UTC and can roll the date back a day.
     const expiryDate = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`;
 
     await FridgeItemModel.create(

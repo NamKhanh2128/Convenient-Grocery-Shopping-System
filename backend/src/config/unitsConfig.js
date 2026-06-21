@@ -1,15 +1,6 @@
-// Single source of truth for the system's standard food units. Must match
-// the canonical rows seeded in database/supabase/seed.sql exactly — every
-// module (fridge, shopping, recipes/meal plan, stats) resolves units through
-// this list so "kg" in the fridge is the same row as "kg" in a recipe.
-//
-// `symbol` here is what's actually stored in the `units.symbol` column for
-// each canonical unit. For everything except weight/volume metrics, the
-// symbol is identical to the Vietnamese name (e.g. 'quả' -> 'quả'), NOT an
-// English abbreviation — a previous bug (UNIT_SYMBOLS in shoppingBridge.js)
-// mapped quả/củ/miếng all to the English 'pcs', which doesn't exist in the
-// real table, so every lookup failed and silently created a junk "pcs" unit
-// row. Don't reintroduce that.
+// Must match the canonical rows seeded in database/supabase/seed.sql exactly.
+// `symbol` must equal the Vietnamese name, not an English abbreviation —
+// mapping quả/củ/miếng to 'pcs' previously broke every unit lookup (see shoppingBridge.js history).
 const CANONICAL_UNITS = [
   { name: 'kg', symbol: 'kg' },
   { name: 'g', symbol: 'g' },

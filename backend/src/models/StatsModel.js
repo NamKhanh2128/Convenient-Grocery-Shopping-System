@@ -108,16 +108,8 @@ class StatsModel {
     return result;
   }
 
-  // "Tiêu thụ theo danh mục" — actual consumption (food_usage_events
-  // event_type='used', logged by FridgeItemModel on "Dùng" and on recipe
-  // cooking deductions), NOT current fridge stock. Excludes the per-cook
-  // 'cooked' summary events, which carry no real ingredient quantity.
-  //
-  // Counts usage EVENTS (lần sử dụng), not summed quantity: items within the
-  // same category use different units (kg, g, quả, củ, gói...), so adding
-  // their raw quantities together — even with a unit label slapped on —
-  // would still be meaningless/wrong. Counting occurrences is unit-agnostic
-  // and the unit is always valid: "lần".
+  // Counts usage events, not summed quantity — items in the same category use
+  // different units, so summing raw quantities would be meaningless.
   static async getCategoryBar(familyId) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
@@ -134,16 +126,7 @@ class StatsModel {
     return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
   }
 
-  // "Thực phẩm đã mua theo thời gian" — number of PRODUCTS purchased per day
-  // in a given week (Monday-Sunday), broken down by category. Items are
-  // measured in different units (kg, quả, gói, lít...), so summing their
-  // quantities into one number would be meaningless — counting items per
-  // category instead is unit-agnostic AND tells you *what kind* of food was
-  // bought each day, not just an anonymous total.
-  //
-  // weekOffset: 0 = the week containing today, -1 = previous week, 1 = next
-  // week, etc. — lets the UI page through past weeks instead of only ever
-  // showing the last 7 days.
+  // Counts items per category (not summed quantity, since units differ per item).
   static async getPurchaseTrend(familyId, weekOffset = 0) {
     const categoriesRes = await query(`SELECT name_vi FROM food_categories ORDER BY id`);
     const categories = categoriesRes.rows.map((r) => r.name_vi);
@@ -183,9 +166,6 @@ class StatsModel {
     return { categories, days: result, from: fromDate, to: toDate };
   }
 
-  // "Thực phẩm đã mua" for the same week as getPurchaseTrend, broken down by
-  // individual food (not category) — how much of each specific food was
-  // actually bought (sli.bought_quantity), in its own unit.
   static async getPurchaseTrendByFood(familyId, weekOffset = 0) {
     const { from: fromDate, to: toDate } = getWeekRange(weekOffset);
 
@@ -212,9 +192,6 @@ class StatsModel {
     return rows.map((r) => ({ ...r, total_quantity: Number(r.total_quantity) }));
   }
 
-  // "Thực phẩm trong tủ theo từng loại" — current fridge stock broken down
-  // by individual food (not category), with the actual quantity + its own
-  // unit, complementing the category-level "Phân loại thực phẩm" pie chart.
   static async getFridgeStockByFood(familyId) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
@@ -238,11 +215,6 @@ class StatsModel {
     return rows.map((r) => ({ ...r, total_quantity: Number(r.total_quantity) }));
   }
 
-  // "Tiêu thụ theo thực phẩm" — actual quantity consumed per food (e.g.
-  // "Cà chua: 1.5 kg", "Trứng gà: 6 quả") over the last 30 days, instead of
-  // an anonymous event count. Each food has its own consistent unit, so
-  // summing its own quantity (unlike summing across a mixed-unit category)
-  // is meaningful here.
   static async getConsumptionByFood(familyId, days = 30) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
@@ -268,11 +240,8 @@ class StatsModel {
     return rows.map((r) => ({ ...r, total_quantity: Number(r.total_quantity) }));
   }
 
-  // "Lãng phí theo thực phẩm" — actual quantity wasted per food over the
-  // last 30 days, combining explicit "Xóa" throw-away events with food still
-  // sitting expired in the fridge (not yet removed) — the same two sources
-  // getWasteReport's wasteRatio already counts, merged here by food name +
-  // unit so e.g. "Cà rốt" wasted both ways shows as one total instead of two.
+  // Merges explicit "Xóa" waste events with still-expired fridge items by
+  // food name + unit, so the same food wasted both ways shows as one total.
   static async getWasteByFood(familyId, days = 30) {
     const userIds = await this.getFamilyUserIds(familyId);
     if (userIds.length === 0) return [];
@@ -317,10 +286,6 @@ class StatsModel {
     return [...merged.values()].sort((a, b) => b.total_quantity - a.total_quantity).slice(0, 15);
   }
 
-  // "Danh sách mua sắm" breakdown — how many lists were created in total,
-  // how many got fully bought ('completed'), how many are still in progress
-  // ('active'), how many were cancelled, and what fraction of all lists
-  // ever created reached completion.
   static async getShoppingListStats(familyId) {
     const { rows } = await query(
       `SELECT status, COUNT(*)::int AS count FROM shopping_lists WHERE group_id = $1 GROUP BY status`,
@@ -347,8 +312,6 @@ class StatsModel {
     if (userIds.length === 0) return { mostUsed: [], leastUsed: [] };
 
     const [usedRes, leastRes] = await Promise.all([
-      // Most used: foods with the most 'used' events (consumed via "Dùng" or
-      // recipe cooking — see FridgeItemModel.deductByName / updateQuantity).
       query(`
         SELECT
           COALESCE(fue.food_id::text, 'fi-' || MIN(fue.fridge_item_id)) AS food_id,
@@ -461,12 +424,8 @@ class StatsModel {
     const wastedCount = wastedCountRes.rows[0]?.total ?? 0;
     const usedCount = usedCountRes.rows[0]?.total ?? 0;
 
-    // "Lãng phí" = food that expired (still sitting in the fridge past its
-    // expiry date) OR that the user explicitly threw away ("Xóa" → a
-    // 'wasted' event). These two sets can't overlap — an expired item still
-    // counted here disappears from `expiredItems` the moment it's deleted,
-    // at which point it's already counted via wastedCount instead — so they
-    // can be summed directly without double counting.
+    // expiredCount and wastedCount can't overlap (an expired item is removed
+    // from expiredItems the moment it's deleted, becoming a wasted event instead).
     const totalWaste = expiredCount + wastedCount;
     const handledTotal = totalWaste + usedCount;
 

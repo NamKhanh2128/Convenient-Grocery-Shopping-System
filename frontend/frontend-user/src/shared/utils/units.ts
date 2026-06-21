@@ -1,9 +1,7 @@
 import type { FoodUnit } from "@/types";
 import { foodUnits } from "@/shared/constants/options";
 
-// Mirrors backend/src/config/unitsConfig.js — keep both in sync. Maps common
-// synonyms/typos/English fallbacks to one of the system's canonical units
-// instead of letting mismatched strings slip through as-is.
+// Mirrors backend/src/config/unitsConfig.js — keep both in sync.
 const UNIT_SYNONYMS: Record<string, FoodUnit> = {
   kgs: "kg",
   kilogram: "kg",
@@ -36,10 +34,8 @@ const UNIT_SYNONYMS: Record<string, FoodUnit> = {
 
 export const FALLBACK_UNIT: FoodUnit = "miếng";
 
-// Units are admin-extensible (the admin "Đơn vị tính" page can create any
-// custom unit, e.g. "test"), so a value that isn't one of the 10 canonical
-// names can still be a real unit — pass it through instead of coercing it
-// to the fallback. Only an empty value (no unit info at all) falls back.
+// Units are admin-extensible, so unrecognized values pass through as-is instead
+// of being coerced to the fallback; only an empty value falls back.
 export function normalizeFoodUnit(value?: string | null): FoodUnit {
   const text = String(value ?? "").trim();
   if (!text) return FALLBACK_UNIT;

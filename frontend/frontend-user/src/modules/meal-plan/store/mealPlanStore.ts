@@ -180,10 +180,7 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
       }).catch(() => set({ suggestions: [] }));
 
-      // "Missing ingredients for the week" should only count from today
-      // onward — no point shopping for days that already passed. When
-      // browsing a future or past week, today falls outside [days[0],
-      // days[6]] so the range is left as the full week.
+      // Missing ingredients count from today onward, not already-passed days.
       const today = localIso(new Date());
       const missingFrom = today >= days[0] && today <= days[6] ? today : days[0];
       void mealApi.getMissingIngredients(familyId, missingFrom, days[6]).then((planMissing) => {
@@ -401,9 +398,7 @@ export const useMealPlanStore = create<MealPlanState>((set, get) => ({
 
     if (!familyId) return;
     const today = localIso(new Date());
-    // For "week" mode: if browsing the week that contains today, start from
-    // today (so it fills today..Sunday, not the already-passed Mon..today-1).
-    // For a future/past week, weekDays[0] (its Monday) is used as before.
+    // "week" mode starts from today (not Monday) when today is within this week.
     const anchorDate = mode === "week"
       ? (today >= weekDays[0] && today <= weekDays[6] ? today : weekDays[0])
       : today;

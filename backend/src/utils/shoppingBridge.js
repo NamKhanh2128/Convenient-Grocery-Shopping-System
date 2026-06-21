@@ -48,17 +48,8 @@ async function resolveShoppingGroupId(familyGroupId) {
   return groupId;
 }
 
-// Resolves to a unit id. Previously this ran the input through a hand-rolled
-// UNIT_SYMBOLS map that translated "quả"/"củ"/"miếng" all to the English
-// symbol "pcs" and "gói" to "pack" — neither of which exists in the real
-// `units` table, so the lookup always missed and silently inserted a junk
-// "pcs" unit row.
-//
-// Units are also admin-extensible (the admin "Đơn vị tính" page can create
-// any custom unit), so an input that isn't one of the 10 canonical names
-// can still be a real, existing unit — check for an exact match first
-// before falling back to normalizeUnitName()'s canonical coercion, which
-// would otherwise silently replace a real custom unit with "miếng".
+// Resolves to a unit id. Checks for an exact existing match first since
+// units are admin-extensible (custom units shouldn't fall back to "miếng").
 async function getDefaultUnitId(unitInput) {
   const raw = String(unitInput || '').trim().toLowerCase();
   if (raw) {

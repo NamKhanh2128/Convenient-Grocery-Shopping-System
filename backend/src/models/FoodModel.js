@@ -3,11 +3,8 @@ const fridgeSchema = require('../config/fridgeSchema');
 
 const { tables: t, columns: c } = fridgeSchema;
 
-// Categories are admin-managed (food_categories table) and open-ended — any
-// real category name must pass through as-is. Only fall back to "Khác" when
-// a food has no category at all (NULL). Previously this re-mapped every
-// category through a hardcoded substring-match list, so any admin-created
-// category not in that list (e.g. "Đậu & hạt") silently became "Khác".
+// Categories are admin-managed and open-ended — pass real names through as-is,
+// only fall back to "Khác" for NULL (don't re-map via a hardcoded list).
 function mapCategory(name) {
   return name || 'Khác';
 }

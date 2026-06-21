@@ -123,18 +123,15 @@ class MealPlanController {
       const anchor = String(date).slice(0, 10);
       let dates;
       if (mode === 'week') {
-        // Fill from `anchor` through the Sunday of the week containing it
-        // (Monday-Sunday weeks, matching the calendar UI) — NOT a fixed 7
-        // days forward. This way, generating "for the week" while it's
-        // already Thursday only fills Thursday..Sunday, not into next week.
+        // Fills through Sunday of the current week (not a fixed 7 days forward),
+        // so generating mid-week only fills the remaining days.
         const d = new Date(anchor + 'T00:00:00');
         const weekday = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
         const daysUntilSunday = weekday === 0 ? 0 : 7 - weekday;
         dates = Array.from({ length: daysUntilSunday + 1 }, (_, i) => {
           const day = new Date(d);
           day.setDate(day.getDate() + i);
-          // Local Y/M/D parts — toISOString would shift to UTC and roll the
-          // date back a day in timezones ahead of UTC (e.g. UTC+7).
+          // Local Y/M/D parts — toISOString would roll the date back a day in timezones ahead of UTC.
           return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
         });
       } else {

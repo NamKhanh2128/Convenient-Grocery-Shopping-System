@@ -121,10 +121,7 @@ class ShoppingService {
       assignedUserId: assignedUserId || null,
     });
 
-    // Resolve every item to its catalog food first, then merge duplicates by
-    // foodId (summing quantity) before inserting — so two requested lines for
-    // the same food (e.g. from meal-plan "missing ingredients" combining
-    // several recipes) become one row instead of splitting the quantity.
+    // Resolve to catalog food first, then merge duplicate foodIds (sum quantity) before inserting.
     const resolved = new Map();
     for (const item of items) {
       let foodId = item.food_id ? Number(item.food_id) : null;
@@ -266,10 +263,7 @@ class ShoppingService {
     const isPurchased = boughtQuantity >= required;
     const inventorySyncedQuantity = previousSynced + delta;
 
-    // Update the shopping-list bookkeeping BEFORE touching the fridge: if this
-    // update fails, nothing is added to inventory, so a retry can't end up
-    // double-adding the item (previously the fridge insert ran first and
-    // would silently succeed even when this update threw).
+    // Update bookkeeping BEFORE the fridge insert, so a failed update can't leave a retry double-adding inventory.
     await ShoppingModel.updateItemPurchased(
       Number(itemId),
       boughtQuantity,

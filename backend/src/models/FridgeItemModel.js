@@ -170,15 +170,8 @@ class FridgeItemModel {
     return ids.length ? ids : [Number(userId)].filter(Boolean);
   }
 
-  // Resolves a unit string to a real unit row. Units are admin-extensible
-  // (the admin "Đơn vị tính" page can create any custom unit, e.g. a test
-  // unit named "test"), so an input that doesn't match one of the 10
-  // canonical names can still be a real, existing unit — check for an exact
-  // match first instead of coercing it through normalizeUnitName() right
-  // away, which would silently lose it to the "miếng" fallback. Only when
-  // nothing matches at all (typo/garbage input) do we fall back to the
-  // canonical name instead of polluting the units table with a junk row
-  // (this is exactly how a stray "pcs" unit got created previously).
+  // Checks for an exact existing match first since units are admin-extensible
+  // (custom units shouldn't fall back to "miếng" via normalizeUnitName()).
   static async findUnitId(unit) {
     const raw = String(unit || '').trim();
     if (raw) {
@@ -224,9 +217,6 @@ class FridgeItemModel {
     return inserted.rows[0].id;
   }
 
-  // Runs `fn(client)` inside a transaction, committing on success and rolling
-  // back on any error. Used to keep a fridge mutation (delete/update quantity)
-  // and its food_usage_events log atomic — either both happen or neither does.
   static async withTransaction(fn) {
     const client = await pool.connect();
     try {
@@ -252,8 +242,6 @@ class FridgeItemModel {
     return rows[0]?.id || null;
   }
 
-  // Records a usage/waste event for statistics (food_usage_events table).
-  // eventType: 'used' (consumed via "Dùng" or recipe cooking) | 'wasted' (deleted/thrown away).
   static async recordUsageEvent({ userId, foodId = null, fridgeItemId = null, eventType, quantity, unitId = null, recipeId = null }, client = { query }) {
     await client.query(
       `INSERT INTO food_usage_events (user_id, food_id, fridge_item_id, event_type, quantity, unit_id, recipe_id)
@@ -262,16 +250,8 @@ class FridgeItemModel {
     );
   }
 
-  // Deducts `quantity` of an ingredient (matched by name) from the family's
-  // shared fridge for recipe cooking — the fridge is family-wide, so a
-  // recipe can draw on whichever member's stock has the ingredient, not
-  // just the cooking user's own rows. Spans multiple members/rows
-  // (earliest expiry first) if one alone doesn't have enough. Used by
-  // RecipeModel.deductIngredientsBestEffort and markCooked, which
-  // previously ran a raw UPDATE that left 0-quantity rows behind. Now:
-  // deletes each row once it's fully consumed and logs a single 'used'
-  // event for the total deducted, attributed to the cooking user, so
-  // cooking is reflected in usage statistics.
+  // Deducts across any family member's rows (earliest expiry first), deleting
+  // each row once fully consumed instead of leaving 0-quantity rows behind.
   static async deductByName({ actingUserId, familyUserIds, name, quantity, recipeId = null }) {
     return this.withTransaction(async (client) => {
       let remainingNeeded = Number(quantity) || 0;
@@ -381,13 +361,7 @@ class FridgeItemModel {
       : await this.findOrCreateFood({ name: data.name, unit: data.unit, categoryId: data.categoryId });
     const food = await query(`SELECT food_name, unit_id, category_id FROM ${t.food} WHERE id = $1`, [foodId]);
     const row = food.rows[0];
-    // An explicitly given unit always wins over the catalog food's default —
-    // the catalog's foods.unit_id is just whatever unit happened to create
-    // that entry first (e.g. "kg" from one recipe) and can be unrelated to
-    // what THIS entry is actually denominated in (e.g. "g" from a shopping
-    // purchase). Falling back to the catalog default only when no unit was
-    // given at all previously made fridge entries silently switch units,
-    // breaking later missing-ingredient comparisons.
+    // An explicit unit always wins over the catalog food's default, which can be unrelated (e.g. "kg").
     const unitId = data.unit ? await this.findUnitId(data.unit) : row?.unit_id || (await this.findUnitId(data.unit));
     const categoryId = data.categoryId && isNumericId(data.categoryId) ? Number(data.categoryId) : row?.category_id || (await this.findCategoryId());
 
@@ -496,10 +470,8 @@ class FridgeItemModel {
     });
   }
 
-  // action='use': consuming food via the "Dùng" action. If it fully empties the
-  // item, delete the row instead of leaving a 0-quantity entry, and log a
-  // 'used' event for statistics. action='restock' just adds quantity back
-  // (e.g. correcting an earlier over-consumption) — no event logged.
+  // action='use' deletes the row instead of leaving 0-quantity and logs a 'used'
+  // event; action='restock' just adds back quantity with no event logged.
   static async updateQuantity(id, quantityUsed, action, userId, familyGroupId = null) {
     const existing = await this.findById(id, userId, familyGroupId);
     if (!existing) return null;

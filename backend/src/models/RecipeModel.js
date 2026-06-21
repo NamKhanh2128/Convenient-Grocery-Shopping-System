@@ -16,12 +16,8 @@ function normalizeText(value) {
     .replace(/\s+/g, ' ');
 }
 
-// Converts a quantity to a fixed base unit so amounts recorded in different
-// (but physically compatible) units can be summed/compared correctly \u2014 e.g.
-// a recipe needing "200 g" must correctly match fridge stock recorded as
-// "0.5 kg" instead of failing a naive 0.5 >= 200 comparison. Count-based
-// units (qu\u1ea3, c\u1ee7, mi\u1ebfng, g\u00f3i, h\u1ed9p, b\u00f3) aren't convertible into one another,
-// so they're left as their own unit and only match exactly.
+// Converts to a common base unit (g/ml) so "200 g" and "0.5 kg" compare
+// correctly. Count-based units (qu\u1ea3, c\u1ee7...) aren't convertible, so they stay as-is.
 const UNIT_CONVERSION = {
   kg: { base: 'g', factor: 1000 },
   g: { base: 'g', factor: 1 },
@@ -35,14 +31,8 @@ function toBaseUnit(quantity, unitName) {
   return { base: unitName || '_unspecified', factor: 1, quantity };
 }
 
-// recipes.is_public + recipes.shared_with_family together encode the 3
-// privacy levels exposed to users: SYSTEM (public to everyone), FAMILY
-// (visible to every member of the creator's family), PRIVATE (creator
-// only). There's no separate "privacy" enum column — keep both booleans in
-// sync through this pair of helpers instead of setting is_public directly
-// from loai_quyen (a previous bug used `loai_quyen !== 'PRIVATE'`, which
-// made FAMILY recipes is_public=true — i.e. SYSTEM — since 'FAMILY' !==
-// 'PRIVATE' too).
+// is_public + shared_with_family together encode SYSTEM/FAMILY/PRIVATE —
+// always set both via this helper, not `loai_quyen !== 'PRIVATE'` (that bug made FAMILY recipes public).
 function resolveVisibilityFlags(loaiQuyen) {
   if (loaiQuyen === 'SYSTEM') return { is_public: true, shared_with_family: false };
   if (loaiQuyen === 'FAMILY') return { is_public: false, shared_with_family: true };
@@ -99,10 +89,7 @@ class RecipeModel {
   }
 
   static async getPopular({ userId, limit = 5 }) {
-    // Combines two cook-tracking sources so a recipe's popularity reflects
-    // however it was cooked: via the meal plan ("Đã nấu" → meal_plan_items.
-    // is_cooked) or directly on the recipe page ("Sau khi nấu" → a 'cooked'
-    // food_usage_events row, one per cook action — see markCooked above).
+    // Counts cooks from both the meal plan (is_cooked) and the recipe page ("Sau khi nấu" → 'cooked' event).
     const { rows } = await query(
       `SELECT r.*,
               (COALESCE(mp_count.cnt, 0) + COALESCE(direct_count.cnt, 0))::int AS cook_count,
@@ -164,10 +151,7 @@ class RecipeModel {
   static async listBase({ search = null, limit = 100, offset = 0, publicOnly = false, userId = null, familyGroupId = null, privacy = null, timeTag = null } = {}) {
     const params = [search || null, Math.min(200, Math.max(1, Number(limit) || 100)), Math.max(0, Number(offset) || 0)];
 
-    // Base visibility clause — a recipe is visible if it's SYSTEM (public),
-    // mine, or shared with the family by another member of the SAME family
-    // as me (resolved dynamically via group_members, same pattern as the
-    // fridge — not a family id snapshotted on the recipe row).
+    // Visible if SYSTEM, mine, or FAMILY-shared by someone in my current family (resolved live via group_members).
     let visibilityClause = '';
     if (publicOnly) {
       visibilityClause = 'AND r.is_public = true';
@@ -255,12 +239,7 @@ class RecipeModel {
     return mapRecipe(rows[0], ingredients.get(String(rows[0].id)) || []);
   }
 
-  // See FridgeItemModel.findUnitId — resolves to a canonical unit name
-  // instead of creating a new row for whatever string was sent in.
-  // Units are admin-extensible — check for an exact existing match before
-  // coercing through normalizeUnitName(), which would otherwise silently
-  // replace a real custom unit (e.g. an admin-created "test" unit) with the
-  // "miếng" fallback just because it isn't one of the 10 canonical names.
+  // Same as FridgeItemModel.findUnitId — check for an exact match first so admin-created custom units aren't lost to the fallback.
   static async findUnitId(unit) {
     const raw = String(unit || '').trim();
     if (raw) {
@@ -388,15 +367,8 @@ class RecipeModel {
     return rows.map((row) => mapRecipe(row, ingredients.get(String(row.id)) || []));
   }
 
-  // The fridge is shared by the whole family, not just the requesting user
-  // — aggregate every family member's fridge_items (same household stock)
-  // so suggestions/missing-ingredient checks reflect what the family
-  // actually has, summing quantities when multiple members hold the same
-  // ingredient.
-  // Returns Map<normalizedFoodName, Map<baseUnit, totalQuantity>> — quantities
-  // are pre-converted to a base unit (see toBaseUnit) so e.g. "0.5 kg" and
-  // "300 g" of the same ingredient correctly sum into one comparable total
-  // instead of being two incompatible raw numbers.
+  // Aggregates fridge stock across the whole family (not just this user).
+  // Returns Map<normalizedName, Map<baseUnit, totalQty>> — pre-converted via toBaseUnit so e.g. "0.5 kg"/"300 g" sum correctly.
   static async getStock(userId, familyGroupId) {
     const userIds = await FridgeItemModel.getFamilyUserIds(userId, familyGroupId);
     const { rows } = await query(
@@ -466,11 +438,7 @@ class RecipeModel {
     );
     if (!ingredients.length) return [];
 
-    // Combine by normalized name + base unit (case/accent-insensitive, and
-    // unit-compatible — e.g. "Cà chua" needed as "0.3 kg" in one recipe and
-    // "200 g" in another both convert to grams before merging) so repeats
-    // across recipes/occurrences sum into one correct total instead of
-    // mixing incompatible raw numbers.
+    // Combine by name + base unit so e.g. "0.3 kg" and "200 g" of the same ingredient sum correctly across recipes.
     const totals = new Map();
     for (const ing of ingredients) {
       const occurrences = occurrencesByRecipe.get(Number(ing.recipe_id)) || 1;

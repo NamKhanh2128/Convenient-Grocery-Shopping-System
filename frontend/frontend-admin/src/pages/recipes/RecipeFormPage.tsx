@@ -176,11 +176,7 @@ export function RecipeFormPage({ mode }: RecipeFormPageProps) {
     setIngredients(next);
   };
 
-  // Selecting a food from the catalog fills its name plus the catalog's own
-  // unit/category as sensible defaults (still overridable below) — keeps
-  // ingredient names exactly matching a real food instead of free-typed
-  // text that can drift from the catalog (typos, wording differences) and
-  // silently break "thiếu nguyên liệu" matching elsewhere in the system.
+  // Name must exactly match a catalog food, or "thiếu nguyên liệu" matching breaks elsewhere.
   const handleIngredientFoodSelect = (idx: number, foodName: string) => {
     const food = foods.find((f) => f.food_name === foodName);
     const next = [...ingredients];

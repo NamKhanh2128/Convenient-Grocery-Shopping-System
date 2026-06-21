@@ -4,10 +4,7 @@ const FridgeController = require('../controllers/FridgeController');
 
 const router = express.Router();
 
-// Shared auth middleware. Unlike the previous inline copy, `authRequired`
-// resolves the caller's family_group_id from the database, so fridge items are
-// scoped to the whole family (not just the individual user). It also rejects
-// mock tokens in production.
+// authRequired resolves family_group_id from the DB, scoping fridge items to the whole family.
 router.use(authRequired);
 
 router.get('/storage-suggestion', FridgeController.getStorageSuggestion);

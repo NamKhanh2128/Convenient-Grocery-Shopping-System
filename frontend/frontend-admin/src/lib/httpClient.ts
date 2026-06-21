@@ -1,12 +1,6 @@
 /**
- * httpClient.ts
- * Lightweight HTTP client for admin API calls to the real backend.
- * Automatically attaches Authorization header from localStorage session.
- *
- * On a 401 (expired access token) it transparently refreshes the access token
- * using the stored 7-day refresh token and retries the request once. If the
- * refresh fails (refresh token also expired/revoked), it clears the session and
- * redirects back to the login page.
+ * Lightweight HTTP client for the admin API. On a 401 it transparently refreshes the
+ * access token and retries once; if refresh also fails, clears the session and redirects to login.
  */
 
 /**
@@ -18,8 +12,7 @@ function normalizeBaseUrl(value?: string): string {
   return value.replace(/\/+$/, "").replace(/\/api$/i, "");
 }
 
-// In development with empty base URL, Vite proxy forwards /api/* and /auth/* to backend:3000.
-// In production, set VITE_API_BASE_URL to the deployed backend origin (without trailing /api).
+// Empty in dev (Vite proxy forwards /api & /auth to backend:3000); set in prod to the backend origin.
 const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 const SESSION_KEY = "nateat.session";
@@ -104,10 +97,8 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  // Access token expired — attempt a single refresh + retry. Never run this for
-  // the auth-flow endpoints themselves (login/me/refresh/logout): a 401 there is
-  // handled by the caller (login form, bootstrap), and triggering the global
-  // refresh-redirect would wipe a session that was just being established.
+  // Skip refresh/retry for auth endpoints themselves — a 401 there is handled by the
+  // caller, and the global redirect would wipe a session that's still being established.
   const isAuthEndpoint = path.startsWith("/auth/");
   if (response.status === 401 && !isRetry && !isAuthEndpoint) {
     if (!refreshPromise) {

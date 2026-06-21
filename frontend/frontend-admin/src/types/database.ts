@@ -1,38 +1,6 @@
 /**
- * frontend-admin/src/types/database.ts
- *
- * SINGLE SOURCE OF TRUTH for all database entity TypeScript types in the admin frontend.
- * Every interface here corresponds 1:1 to a table in database/supabase/database-schema.md.
- *
- * RULES:
- *  - No ghost types (columns that do not exist in the schema)
- *  - No legacy aliases (family_id → id, family_name → name, etc.)
- *  - No mock/localStorage properties
- *  - No invented fields (calories, difficulty, avatar_url, recipe_name, food_name_alias, etc.)
- *  - If a value is only needed for display (joined from another table), it must NOT appear here;
- *    it belongs in the API's `*WithMeta` / `*Summary` extension types.
- *
- * Tables covered (matches schema table list order):
- *  1.  users
- *  2.  roles
- *  3.  refresh_tokens
- *  4.  family_groups
- *  5.  group_members
- *  6.  family_invitations
- *  7.  food_categories
- *  8.  units
- *  9.  foods
- *  10. fridge_items
- *  11. fridge_item_storage_locations
- *  12. shopping_lists
- *  13. shopping_list_items
- *  14. recipes
- *  15. recipe_ingredients
- *  16. meal_plans
- *  17. meal_plan_items
- *  18. favorite_recipes
- *  19. notifications
- *  20. danh_muc_cong_thuc
+ * Single source of truth for DB entity types — must mirror database/supabase/database-schema.md
+ * 1:1 (no ghost fields, no legacy aliases, no mock/display-only properties).
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -305,10 +273,7 @@ export interface AuthSession {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UI helper literals — NOT database columns; used only as filter/form options
-// These correspond to the values stored IN schema string columns, not to column
-// names themselves. They are kept here for convenience but should NOT be used as
-// property keys on entity objects.
+// UI helper literals — values stored in schema string columns, not column names themselves.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Valid values for food_categories.name_vi */
@@ -330,41 +295,9 @@ export type StorageLocation = "Ngăn mát" | "Ngăn đông" | "Kệ thường";
 export type MealTypeValue = "breakfast" | "lunch" | "dinner" | "snack";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DEPRECATED / REMOVED ghost types — kept as comments so consumers know what
-// changed and why. Do NOT reinstate these.
-//
-//  ❌ type UserRole = "ADMIN" | "USER"
-//      → users.role is a free string column in schema; use string literal narrowing in code.
-//
-//  ❌ type MealType = "Sáng" | "Trưa" | ...
-//      → schema uses English values: breakfast/lunch/dinner/snack (meal_plan_items.meal_type)
-//
-//  ❌ type FoodCategory = "Rau củ" | ...
-//      → renamed FoodCategoryLabel; this is a display value, not a schema column name
-//
-//  ❌ type FoodUnit = "kg" | "g" | ...
-//      → renamed UnitSymbol; corresponds to units.symbol, not a schema column name
-//
-//  ❌ type FoodLocation = "Ngăn mát" | ...
-//      → renamed StorageLocation; corresponds to fridge_items.storage_location value
-//
-//  ❌ interface Family { family_id, family_name, created_by }
-//      → replaced by FamilyGroup with correct schema column names: id, name, created_by, code
-//
-//  ❌ interface FamilyMember { id, family_id, user_id }
-//      → replaced by GroupMember with correct column names: id, group_id, user_id, joined_at, role
-//
-//  ❌ interface Food { food_id, food_name, category: FoodCategory, unit: FoodUnit, icon }
-//      → ghost fields food_id (→ id), category string (→ category_id FK), unit string (→ unit_id FK)
-//
-//  ❌ interface FridgeItem { fridge_item_id, family_id, food_id, expiry_date, location }
-//      → ghost fields fridge_item_id (→ id), family_id (→ user_id), expiry_date (→ expiration_date),
-//        location (→ storage_location). food_id is not a column in fridge_items.
-//
-//  ❌ interface IngredientCategory { id, name_vi, name_en, description }
-//      → duplicate of FoodCategory (same table food_categories); removed, use FoodCategory.
-//
-//  ❌ interface RecipeSuggestion { recipe: Recipe; available_food_ids; missing }
-//      → application-level UI model, not a schema entity; removed from canonical types.
-//        Use it as a local type in the page/component that needs it.
+// Do NOT reinstate: UserRole, MealType (Vietnamese variant), FoodCategory/FoodUnit/
+// FoodLocation (renamed to *Label/*Symbol/StorageLocation below), Family/FamilyMember
+// (renamed FamilyGroup/GroupMember with correct columns), or ghost fields on
+// Food/FridgeItem (food_id, family_id, expiry_date, location, etc.) — all removed
+// as duplicates or non-schema fields during the ghost-type cleanup.
 // ─────────────────────────────────────────────────────────────────────────────

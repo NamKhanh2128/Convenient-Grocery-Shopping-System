@@ -1,6 +1,4 @@
-// Admin constants/options.ts
-// UI helper value lists — correspond to values stored in schema string columns.
-// These are NOT database column names; they are valid *values* for those columns.
+// UI helper value lists — valid *values* for schema string columns, not column names.
 import type { FoodCategoryLabel, UnitSymbol, StorageLocation } from "@/types";
 
 /** Valid values for food_categories.name_vi (display labels used in filter/form UI) */
@@ -13,10 +11,8 @@ export const foodCategories: FoodCategoryLabel[] = [
   "Khác",
 ];
 
-// Single source of truth for the system's standard food units in this app —
-// must match the canonical rows seeded in database/supabase/seed.sql
-// (frontend-user's shared/constants/options.ts and the backend's
-// config/unitsConfig.js mirror this same list).
+// Must match the canonical rows seeded in database/supabase/seed.sql (mirrored in
+// frontend-user's shared/constants/options.ts and backend's config/unitsConfig.js).
 export const foodUnits: UnitSymbol[] = ["kg", "g", "lít", "ml", "quả", "củ", "miếng", "gói", "hộp", "bó"];
 
 /** Valid values for fridge_items.storage_location */

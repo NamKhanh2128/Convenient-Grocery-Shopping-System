@@ -1,13 +1,5 @@
-// COPIED AND ADAPTED from src/shared/lib/mockDb.ts
-// ⚠️ CRITICAL: DB_KEY and SESSION_KEY MUST match user frontend exactly
-// This ensures admin and user frontend share the same localStorage data
-//
-// NOTE: The types below are intentionally LOCAL to this file (prefixed `Mock*`)
-// and are NOT exported from `@/types` (frontend-admin/src/types/database.ts).
-// `database.ts` mirrors `database/supabase/database-schema.md` 1:1 for the real
-// backend admin APIs; this file is a self-contained localStorage mock layer used
-// only for the admin app's login session chrome and notification bell, and its
-// shapes intentionally do not correspond to schema tables.
+// Mock localStorage layer for login session chrome + notification bell only.
+// DB_KEY/SESSION_KEY must match the user frontend so both share the same localStorage data.
 
 import { addDaysIso, todayIso } from "@/lib/date";
 import { storage, uid, wait } from "@/lib/storage";

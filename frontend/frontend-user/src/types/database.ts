@@ -1,25 +1,6 @@
 /**
- * frontend-user/src/types/database.ts
- *
- * This file contains TWO sections:
- *
- * ── SECTION A: Schema-Compliant Types ───────────────────────────────────────
- *   Exact 1:1 mirrors of database/supabase/database-schema.md tables.
- *   These are the canonical types for the real backend API.
- *   Naming follows schema column names exactly.
- *
- * ── SECTION B: Mock/Offline Layer Types ─────────────────────────────────────
- *   Legacy types used exclusively by the offline localStorage mockDb layer
- *   (shared/lib/mockDb.ts) and the adapter functions that normalize real API
- *   responses into the shapes the UI components were built around.
- *   These do NOT match the database schema and are intentionally kept for
- *   backward compatibility with the offline-first mockDb layer.
- *   They are labeled with @deprecated where a schema type exists.
- *
- * RULES:
- *  - Never use mock types in new real-API code
- *  - When building new features, use Section A types
- *  - Section B types will be migrated away incrementally
+ * Section A below mirrors database-schema.md exactly (real API types).
+ * Section B holds legacy mockDb/offline types — do not use in new real-API code.
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -227,11 +208,7 @@ export interface DbNotification {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SECTION B — MOCK/OFFLINE LAYER TYPES
-// Used by shared/lib/mockDb.ts (localStorage offline layer) and the adapter
-// functions inside module APIs that normalize backend responses.
-// These do NOT match the database schema but are kept for backward
-// compatibility with the offline-first mockDb layer.
+// SECTION B — MOCK/OFFLINE LAYER TYPES (mockDb.ts) — do not match the schema
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
